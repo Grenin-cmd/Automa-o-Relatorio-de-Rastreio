@@ -1,0 +1,33 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: |
+          pip install flask pandas python-docx openpyxl pyinstaller
+
+      - name: Gerar o .exe
+        run: |
+          pyinstaller --onefile --name AnalisadorRastreio --add-data "templates;templates" app.py
+
+      - name: Publicar o .exe pronto
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnalisadorRastreio-windows
+          path: dist/AnalisadorRastreio.exe
