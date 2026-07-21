@@ -4,6 +4,7 @@ import io
 from io import BytesIO
 import os
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -18,7 +19,16 @@ import pandas as pd
 
 from analisador_rastreio import RastreamentoAnalyzer
 
-app = Flask(__name__)
+def _template_folder() -> str | None:
+    """Quando o app roda como .exe empacotado (PyInstaller), os arquivos ficam
+    numa pasta temporária diferente da pasta do script — isso aponta pro
+    lugar certo em ambos os casos (rodando normal ou como .exe)."""
+    if getattr(sys, "frozen", False):
+        return os.path.join(sys._MEIPASS, "templates")  # type: ignore[attr-defined]
+    return None
+
+
+app = Flask(__name__, template_folder=_template_folder())
 app.secret_key = "mudar_para_uma_chave_secreta"
 
 
@@ -40,6 +50,14 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [_normalize_column_name(col) for col in df.columns]
     return df
+
+
+def _parse_velocidade(series: pd.Series) -> pd.Series:
+    """Converte velocidade em texto (ex: '37 km/h', '105,5') para número.
+    Extrai só a parte numérica, ignorando a unidade, e aceita tanto vírgula
+    quanto ponto como separador decimal."""
+    extraida = series.astype(str).str.extract(r"(-?\d+(?:[.,]\d+)?)")[0]
+    return pd.to_numeric(extraida.str.replace(",", ".", regex=False), errors="coerce")
 
 
 def _resolver_coluna(df: pd.DataFrame, aliases: list[str]) -> str:
@@ -123,12 +141,30 @@ def _find_missing_poi_rows(df: pd.DataFrame) -> tuple[list[dict[str, object]], l
     except ValueError:
         return [], []
 
+    # Em algumas plataformas (ex: exportação com coluna "Distância"), o POI
+    # sempre vem preenchido com o nome do ponto mais próximo, mesmo quando o
+    # veículo está longe dele — quem diz se realmente "está no POI" é a
+    # distância. Quando essa coluna existir, ela manda mais que o texto do POI.
+    distance_col = None
+    for alias in ["poi_distancia", "distancia", "distance"]:
+        try:
+            distance_col = _resolver_coluna(df, [alias])
+            break
+        except ValueError:
+            continue
+
     working = _normalize_columns(df.copy())
     working[timestamp_col] = pd.to_datetime(working[timestamp_col], dayfirst=True, errors="coerce")
-    working[speed_col] = pd.to_numeric(working[speed_col], errors="coerce").fillna(9999)
+    working[speed_col] = _parse_velocidade(working[speed_col]).fillna(9999)
+
+    if distance_col is not None:
+        working[distance_col] = pd.to_numeric(working[distance_col], errors="coerce").fillna(9999)
+        sem_poi_real = working[distance_col] > 200
+    else:
+        sem_poi_real = working[poi_col].isna() | working[poi_col].astype(str).str.strip().eq("")
 
     missing = working[
-        (working[poi_col].isna() | working[poi_col].astype(str).str.strip().eq(""))
+        sem_poi_real
         & (working[speed_col] <= 10)
     ].copy()
     missing = missing.dropna(subset=[timestamp_col]).sort_values(timestamp_col).reset_index(drop=True)
@@ -184,6 +220,66 @@ def _find_missing_poi_rows(df: pd.DataFrame) -> tuple[list[dict[str, object]], l
         for record in groups
     ]
     return rows, columns
+
+
+def _gerar_timeline_viagem(df: pd.DataFrame, placa: str, pois: list[dict[str, object]], limite_velocidade_kmh: float) -> list[dict[str, object]]:
+    """Junta, para UMA placa: paradas em POI + excesso de velocidade (via
+    RastreamentoAnalyzer) e paradas suspeitas (via _find_missing_poi_rows),
+    tudo em ordem cronológica, pra alimentar a timeline de viagem na tela."""
+    try:
+        placa_col = _resolver_coluna(df, ["Placa", "placa", "plate"])
+    except ValueError:
+        return []
+
+    subset = df[df[placa_col].astype(str) == placa]
+    if subset.empty:
+        return []
+
+    analyzer = RastreamentoAnalyzer(pois=pois)
+    eventos = list(analyzer.gerar_eventos_viagem(subset, limite_velocidade_kmh))
+
+    missing_rows, _ = _find_missing_poi_rows(subset)
+    for row in missing_rows:
+        eventos.append(
+            {
+                "tipo": "parada_suspeita",
+                "local": None,
+                "inicio": row["Início"],
+                "fim": row["Fim"],
+                "em_andamento": False,
+            }
+        )
+
+    eventos.sort(key=lambda e: e["inicio"])
+    return eventos
+
+
+def _find_suspicious_stops(df: pd.DataFrame) -> list[dict[str, object]]:
+    """Verifica, para TODAS as placas do arquivo, paradas acima de 10 minutos
+    em um local sem POI identificado (independente da placa selecionada na tela)."""
+    try:
+        placa_col = _resolver_coluna(df, ["Placa", "placa", "plate"])
+    except ValueError:
+        return []
+
+    resultados: list[dict[str, object]] = []
+    placas = sorted(df[placa_col].dropna().astype(str).unique().tolist())
+    for placa in placas:
+        subset = df[df[placa_col].astype(str) == placa]
+        rows, _ = _find_missing_poi_rows(subset)
+        for row in rows:
+            resultados.append(
+                {
+                    "Placa": placa,
+                    "Início": row["Início"],
+                    "Fim": row["Fim"],
+                    "Duração": row["Duração"],
+                    "Registros": row["Registros"],
+                }
+            )
+
+    resultados.sort(key=lambda item: item["Início"])  # type: ignore[arg-type]
+    return resultados
 
 
 def _gerar_resumo_geral_placas(df: pd.DataFrame, pois: list[dict[str, object]]) -> str:
@@ -361,11 +457,14 @@ def index():
     )
     placa_escolhida = request.form.get("placa", "")
     action = request.form.get("action", "analyze")
+    tipo_veiculo = request.form.get("tipo_veiculo", "pesado")
     columns: list[str] = []
     missing_rows: list[dict[str, object]] = []
     missing_columns: list[str] = []
     placas: list[str] = []
     resumo_geral = None
+    paradas_suspeitas: list[dict[str, object]] = []
+    timeline_eventos: list[dict[str, object]] = []
     docx_available = Document is not None
     uploaded_file_path = session.get("uploaded_file_path")
     file_name = session.get("uploaded_file_name", "")
@@ -384,6 +483,7 @@ def index():
             if not placa_escolhida and placas:
                 placa_escolhida = placas[0]
             missing_rows, missing_columns = _find_missing_poi_rows(df)
+            paradas_suspeitas = _find_suspicious_stops(df)
             if file_name and columns:
                 resumo_geral = None
         except Exception:
@@ -410,6 +510,9 @@ def index():
                     columns=columns,
                     missing_rows=missing_rows,
                     missing_columns=missing_columns,
+                    paradas_suspeitas=paradas_suspeitas,
+                    timeline_eventos=timeline_eventos,
+                    tipo_veiculo=tipo_veiculo,
                     file_name=file_name,
                 )
 
@@ -435,6 +538,9 @@ def index():
                 columns=columns,
                 missing_rows=missing_rows,
                 missing_columns=missing_columns,
+                paradas_suspeitas=paradas_suspeitas,
+                timeline_eventos=timeline_eventos,
+                tipo_veiculo=tipo_veiculo,
                 file_name=file_name,
                 resumo_geral=resumo_geral,
             )
@@ -453,6 +559,9 @@ def index():
                 columns=columns,
                 missing_rows=missing_rows,
                 missing_columns=missing_columns,
+                paradas_suspeitas=paradas_suspeitas,
+                timeline_eventos=timeline_eventos,
+                tipo_veiculo=tipo_veiculo,
                 file_name=file_name,
                 resumo_geral=resumo_geral,
                 docx_available=docx_available,
@@ -472,6 +581,9 @@ def index():
                 columns=columns,
                 missing_rows=missing_rows,
                 missing_columns=missing_columns,
+                paradas_suspeitas=paradas_suspeitas,
+                timeline_eventos=timeline_eventos,
+                tipo_veiculo=tipo_veiculo,
                 file_name=file_name,
                 resumo_geral=resumo_geral,
                 docx_available=docx_available,
@@ -480,6 +592,8 @@ def index():
         placas = sorted(df[placa_col].dropna().astype(str).unique().tolist())
         if not placa_escolhida and placas:
             placa_escolhida = placas[0]
+
+        paradas_suspeitas = _find_suspicious_stops(df)
 
         if placa_escolhida:
             df = df[df[placa_col].astype(str) == placa_escolhida]
@@ -498,12 +612,16 @@ def index():
                 columns=columns,
                 missing_rows=missing_rows,
                 missing_columns=missing_columns,
+                paradas_suspeitas=paradas_suspeitas,
+                timeline_eventos=timeline_eventos,
+                tipo_veiculo=tipo_veiculo,
                 file_name=file_name,
                 resumo_geral=resumo_geral,
                 docx_available=docx_available,
             )
 
         analyzer = RastreamentoAnalyzer(pois=pois)
+        limite_velocidade_kmh = 95.0 if tipo_veiculo == "pesado" else 110.0
         try:
             if action == "summary":
                 resumo_geral = _gerar_resumo_geral_placas(carregar_arquivo(uploaded_file_path), pois)
@@ -511,6 +629,10 @@ def index():
             elif action == "summary_latest":
                 resumo_geral = _gerar_resumo_ultimo_estado(carregar_arquivo(uploaded_file_path), pois)
                 session["word_summary"] = resumo_geral
+            elif action == "timeline":
+                timeline_eventos = _gerar_timeline_viagem(
+                    carregar_arquivo(uploaded_file_path), placa_escolhida, pois, limite_velocidade_kmh
+                )
             else:
                 report = analyzer.gerar_relatorio(df)
         except Exception as error:
@@ -526,6 +648,9 @@ def index():
             columns=columns,
             missing_rows=missing_rows,
             missing_columns=missing_columns,
+            paradas_suspeitas=paradas_suspeitas,
+            timeline_eventos=timeline_eventos,
+            tipo_veiculo=tipo_veiculo,
             file_name=file_name,
             resumo_geral=resumo_geral,
             docx_available=docx_available,
@@ -540,6 +665,9 @@ def index():
         columns=[],
         missing_rows=missing_rows,
         missing_columns=missing_columns,
+        paradas_suspeitas=paradas_suspeitas,
+        timeline_eventos=timeline_eventos,
+        tipo_veiculo=tipo_veiculo,
         file_name=file_name,
         resumo_geral=resumo_geral,
         docx_available=docx_available,
@@ -557,12 +685,24 @@ def _find_available_port(initial_port: int = 5000) -> int:
                 port += 1
 
 
+def _open_browser_when_ready(url: str) -> None:
+    """Espera o servidor subir e então abre o navegador padrão automaticamente."""
+    time.sleep(1.2)
+    webbrowser.open(url)
+
+
 if __name__ == "__main__":
-    print("Iniciando a aplicação na porta 5000...")
+    PORT = 5000
+    URL = f"http://127.0.0.1:{PORT}"
+
+    print(f"Iniciando a aplicação em {URL} ...")
+
+    # Abre o navegador sozinho, sem precisar digitar o endereço na mão.
+    threading.Thread(target=_open_browser_when_ready, args=(URL,), daemon=True).start()
 
     app.run(
         host="0.0.0.0",
-        port=5000,
+        port=PORT,
         debug=False,
         use_reloader=False
     )
