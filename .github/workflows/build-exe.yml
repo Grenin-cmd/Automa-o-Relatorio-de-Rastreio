@@ -22,6 +22,13 @@ jobs:
         run: |
           pip install flask pandas python-docx openpyxl pyinstaller
 
+      - name: Verificar código atualizado
+        run: |
+          echo "=== COMMIT ==="
+          git rev-parse HEAD
+          echo "=== APP.PY ==="
+          git log -1 --format="%H %ci" -- app.py
+
       - name: Gerar o .exe
         run: |
           pyinstaller --clean --noconfirm --onefile --name AnalisadorRastreio --add-data "templates;templates" app.py
