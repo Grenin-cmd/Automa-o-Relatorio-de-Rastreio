@@ -29,5 +29,5 @@ jobs:
       - name: Publicar o .exe pronto
         uses: actions/upload-artifact@v4
         with:
-          name: AnalisadorRastreio-windows
+          name: AnalisadorRastreio-windows-novo
           path: dist/AnalisadorRastreio.exe
