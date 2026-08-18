@@ -23,9 +23,8 @@ jobs:
           pip install flask pandas python-docx openpyxl pyinstaller
 
       - name: Gerar o .exe
-  run: |
-    pyinstaller --clean --noconfirm --onefile --name AnalisadorRastreio --add-data "templates;templates" app.py
-
+        run: |
+          pyinstaller --clean --noconfirm --onefile --name AnalisadorRastreio --add-data "templates;templates" app.py
 
       - name: Publicar o .exe pronto
         uses: actions/upload-artifact@v4
