@@ -23,527 +23,93 @@
     --muted:#5c6b63;
     --radius:14px;
   }
-
   *{box-sizing:border-box;}
   html{-webkit-font-smoothing:antialiased;}
-  body{
-    margin:0;
-    background:var(--paper);
-    color:var(--ink);
-    font-family:'Inter', system-ui, sans-serif;
-    line-height:1.5;
-  }
-
-  /* ---------- header ---------- */
-  header.app-header{
-    background:var(--ink);
-    color:#f1f4f1;
-    padding:22px 32px;
-    display:flex;
-    align-items:center;
-    gap:16px;
-  }
-  .ping{
-    position:relative;
-    width:36px;
-    height:36px;
-    flex:none;
-  }
-  .ping span{
-    position:absolute;
-    inset:0;
-    border-radius:50%;
-    border:1.5px dashed rgba(241,244,241,0.35);
-  }
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:'Inter', system-ui, sans-serif; line-height:1.5; }
+  header.app-header{ background:var(--ink); color:#f1f4f1; padding:22px 32px; display:flex; align-items:center; gap:16px; }
+  .ping{position:relative; width:36px; height:36px; flex:none;}
+  .ping span{position:absolute; inset:0; border-radius:50%; border:1.5px dashed rgba(241,244,241,0.35);}
   .ping span:nth-child(2){inset:7px; border-style:solid; border-color:rgba(241,244,241,0.55);}
-  .ping i{
-    position:absolute;
-    inset:14px;
-    border-radius:50%;
-    background:#7fd7b8;
-    box-shadow:0 0 0 0 rgba(127,215,184,0.6);
-    animation:pulse 2.6s ease-out infinite;
-  }
-  @keyframes pulse{
-    0%{ box-shadow:0 0 0 0 rgba(127,215,184,0.55); }
-    70%{ box-shadow:0 0 0 10px rgba(127,215,184,0); }
-    100%{ box-shadow:0 0 0 0 rgba(127,215,184,0); }
-  }
-  @media (prefers-reduced-motion: reduce){
-    .ping i{animation:none;}
-  }
-  .app-header h1{
-    font-family:'Space Grotesk', sans-serif;
-    font-size:1.25rem;
-    font-weight:600;
-    margin:0;
-    letter-spacing:-0.01em;
-  }
-  .app-header p{
-    margin:2px 0 0;
-    font-size:0.85rem;
-    color:#aab8b1;
-  }
-
-  /* ---------- layout ---------- */
-  main.layout{
-    display:grid;
-    grid-template-columns:340px 1fr;
-    gap:24px;
-    max-width:1240px;
-    margin:28px auto;
-    padding:0 24px 60px;
-    align-items:start;
-  }
-  @media (max-width: 900px){
-    main.layout{grid-template-columns:1fr; margin:20px auto;}
-  }
-
-  .card{
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-radius:var(--radius);
-    padding:22px;
-  }
-
-  .sidebar{
-    display:flex;
-    flex-direction:column;
-    gap:16px;
-    position:sticky;
-    top:24px;
-  }
-
-  .step-eyebrow{
-    display:flex;
-    align-items:baseline;
-    gap:8px;
-    margin:0 0 12px;
-  }
-  .step-eyebrow .num{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.72rem;
-    color:var(--accent);
-    background:var(--accent-soft);
-    border-radius:5px;
-    padding:2px 6px;
-    letter-spacing:0.03em;
-  }
-  .step-eyebrow h2{
-    font-family:'Space Grotesk', sans-serif;
-    font-size:0.98rem;
-    font-weight:600;
-    margin:0;
-  }
-
-  label{
-    display:block;
-    font-size:0.82rem;
-    font-weight:500;
-    color:var(--muted);
-    margin-bottom:6px;
-  }
-
-  input[type="file"],
-  input[type="text"],
-  select,
-  textarea{
-    width:100%;
-    font-family:'Inter', sans-serif;
-    font-size:0.9rem;
-    padding:10px 12px;
-    border:1px solid var(--line);
-    border-radius:9px;
-    background:#fbfcfb;
-    color:var(--ink);
-    transition:border-color .15s ease, box-shadow .15s ease;
-  }
-  textarea{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.8rem;
-    min-height:120px;
-    resize:vertical;
-    line-height:1.55;
-  }
-  input:focus, select:focus, textarea:focus{
-    outline:none;
-    border-color:var(--accent);
-    box-shadow:0 0 0 3px var(--accent-soft);
-  }
+  .ping i{ position:absolute; inset:14px; border-radius:50%; background:#7fd7b8; box-shadow:0 0 0 0 rgba(127,215,184,0.6); animation:pulse 2.6s ease-out infinite; }
+  @keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(127,215,184,0.55); } 70%{ box-shadow:0 0 0 10px rgba(127,215,184,0); } 100%{ box-shadow:0 0 0 0 rgba(127,215,184,0); } }
+  @media (prefers-reduced-motion: reduce){ .ping i{animation:none;} }
+  .app-header h1{ font-family:'Space Grotesk', sans-serif; font-size:1.25rem; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .app-header p{ margin:2px 0 0; font-size:0.85rem; color:#aab8b1; }
+  main.layout{ display:grid; grid-template-columns:340px 1fr; gap:24px; max-width:1280px; margin:28px auto; padding:0 24px 60px; align-items:start; }
+  @media (max-width: 960px){ main.layout{grid-template-columns:1fr; margin:20px auto;} }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:22px; }
+  .sidebar{ display:flex; flex-direction:column; gap:16px; }
+  .step-eyebrow{ display:flex; align-items:baseline; gap:8px; margin:0 0 12px; }
+  .step-eyebrow .num{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; color:var(--accent); background:var(--accent-soft); border-radius:5px; padding:2px 6px; letter-spacing:0.03em; }
+  .step-eyebrow h2{ font-family:'Space Grotesk', sans-serif; font-size:0.98rem; font-weight:600; margin:0; }
+  label{ display:block; font-size:0.82rem; font-weight:500; color:var(--muted); margin-bottom:6px; }
+  input[type="file"], input[type="text"], input[type="number"], select, textarea{ width:100%; font-family:'Inter', sans-serif; font-size:0.9rem; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:#fbfcfb; color:var(--ink); transition:border-color .15s ease, box-shadow .15s ease; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
   .field{margin-bottom:14px;}
   .field:last-child{margin-bottom:0;}
-  .hint{
-    font-size:0.74rem;
-    color:var(--muted);
-    margin-top:6px;
-  }
-
-  .file-chip{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    font-size:0.78rem;
-    font-family:'IBM Plex Mono', monospace;
-    background:var(--accent-soft);
-    color:var(--accent);
-    border-radius:20px;
-    padding:5px 12px;
-    margin-bottom:14px;
-  }
+  .hint{ font-size:0.74rem; color:var(--muted); margin-top:6px; }
+  .file-chip{ display:inline-flex; align-items:center; gap:8px; font-size:0.78rem; font-family:'IBM Plex Mono', monospace; background:var(--accent-soft); color:var(--accent); border-radius:20px; padding:5px 12px; margin-bottom:14px; }
   .file-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);}
-
-  .vehicle-type-toggle{
-    display:flex;
-    gap:8px;
-  }
-  .vt-option{
-    flex:1;
-    display:block;
-    cursor:pointer;
-    border:1px solid var(--line);
-    border-radius:9px;
-    padding:8px 10px;
-    font-size:0.8rem;
-    font-weight:600;
-    color:var(--muted);
-    background:#fbfcfb;
-    transition:border-color .15s ease, color .15s ease, background .15s ease;
-  }
-  .vt-option input{
-    position:absolute;
-    opacity:0;
-    width:0;
-    height:0;
-  }
-  .vt-option small{
-    display:block;
-    font-weight:400;
-    font-size:0.68rem;
-    font-family:'IBM Plex Mono', monospace;
-    color:var(--muted);
-    margin-top:2px;
-  }
-  .vt-option:has(input:checked){
-    border-color:var(--accent);
-    background:var(--accent-soft);
-    color:var(--accent);
-  }
+  .vehicle-type-toggle{ display:flex; gap:8px; }
+  .vt-option{ flex:1; display:block; cursor:pointer; border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-size:0.8rem; font-weight:600; color:var(--muted); background:#fbfcfb; transition:border-color .15s ease, color .15s ease, background .15s ease; position:relative; }
+  .vt-option input{ position:absolute; opacity:0; width:0; height:0; }
+  .vt-option small{ display:block; font-weight:400; font-size:0.68rem; font-family:'IBM Plex Mono', monospace; color:var(--muted); margin-top:2px; }
+  .vt-option:has(input:checked){ border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
   .vt-option:has(input:checked) small{color:var(--accent);}
-
-  /* ---------- buttons ---------- */
-  .actions{
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-  }
-  button{
-    font-family:'Inter', sans-serif;
-    font-size:0.86rem;
-    font-weight:600;
-    padding:11px 16px;
-    border-radius:9px;
-    border:1px solid transparent;
-    cursor:pointer;
-    transition:transform .1s ease, filter .15s ease;
-  }
+  .actions{ display:flex; flex-direction:column; gap:10px; }
+  button{ font-family:'Inter', sans-serif; font-size:0.86rem; font-weight:600; padding:11px 16px; border-radius:9px; border:1px solid transparent; cursor:pointer; transition:transform .1s ease, filter .15s ease; }
   button:active{transform:translateY(1px);}
-  .btn-primary{
-    background:var(--ink);
-    color:#f1f4f1;
-  }
+  .btn-primary{ background:var(--ink); color:#f1f4f1; }
   .btn-primary:hover{filter:brightness(1.15);}
-  .btn-secondary{
-    background:var(--surface);
-    color:var(--ink);
-    border-color:var(--line);
-  }
+  .btn-secondary{ background:var(--surface); color:var(--ink); border-color:var(--line); }
   .btn-secondary:hover{background:var(--paper);}
-  .btn-download{
-    background:var(--accent);
-    color:#fff;
-    text-decoration:none;
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    font-size:0.84rem;
-    font-weight:600;
-    padding:10px 16px;
-    border-radius:9px;
-  }
+  .btn-download{ background:var(--accent); color:#fff; text-decoration:none; display:inline-flex; align-items:center; gap:8px; font-size:0.84rem; font-weight:600; padding:10px 16px; border-radius:9px; }
   .btn-download:hover{filter:brightness(1.08);}
-
-  /* ---------- flash messages ---------- */
-  .flash{
-    padding:12px 16px;
-    border-radius:10px;
-    font-size:0.86rem;
-    margin-bottom:14px;
-    border:1px solid transparent;
-  }
+  .flash{ padding:12px 16px; border-radius:10px; font-size:0.86rem; margin-bottom:14px; border:1px solid transparent; }
   .flash-warning{background:var(--warn-soft); color:var(--warn); border-color:#ecd3b8;}
   .flash-danger{background:var(--danger-soft); color:var(--danger); border-color:#e7c3c3;}
   .flash-info{background:var(--accent-soft); color:var(--accent); border-color:#cfe3da;}
-
-  /* ---------- results ---------- */
-  .tabs{
-    display:flex;
-    gap:6px;
-    margin-bottom:4px;
-    border-bottom:1px solid var(--line);
-  }
-  .tab-btn{
-    background:none;
-    border:none;
-    border-radius:9px 9px 0 0;
-    padding:10px 16px;
-    font-size:0.86rem;
-    font-weight:600;
-    color:var(--muted);
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
+  .flash-success{background:var(--accent-soft); color:var(--accent); border-color:#cfe3da;}
+  .tabs{ display:flex; gap:6px; margin-bottom:4px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .tab-btn{ background:none; border:none; border-radius:9px 9px 0 0; padding:10px 16px; font-size:0.86rem; font-weight:600; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:8px; }
   .tab-btn:hover{color:var(--ink);}
-  .tab-btn.active{
-    color:var(--ink);
-    background:var(--surface);
-    border:1px solid var(--line);
-    border-bottom:1px solid var(--surface);
-    margin-bottom:-1px;
-  }
-  .tab-count{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.68rem;
-    background:var(--warn-soft);
-    color:var(--warn);
-    border-radius:20px;
-    padding:1px 8px;
-  }
+  .tab-btn.active{ color:var(--ink); background:var(--surface); border:1px solid var(--line); border-bottom:1px solid var(--surface); margin-bottom:-1px; }
+  .tab-count{ font-family:'IBM Plex Mono', monospace; font-size:0.68rem; background:var(--warn-soft); color:var(--warn); border-radius:20px; padding:1px 8px; }
   .tab-panel{display:none;}
   .tab-panel.active{display:flex; flex-direction:column; gap:20px;}
-
-  .timeline{
-    position:relative;
-    padding-left:26px;
-  }
-  .timeline::before{
-    content:"";
-    position:absolute;
-    left:6px;
-    top:4px;
-    bottom:4px;
-    width:1px;
-    background:var(--line);
-  }
-  .timeline-item{
-    position:relative;
-    padding-bottom:18px;
-  }
+  .timeline{ position:relative; padding-left:26px; }
+  .timeline::before{ content:""; position:absolute; left:6px; top:4px; bottom:4px; width:1px; background:var(--line); }
+  .timeline-item{ position:relative; padding-bottom:18px; }
   .timeline-item:last-child{padding-bottom:0;}
-  .timeline-dot{
-    position:absolute;
-    left:-26px;
-    top:3px;
-    width:13px;
-    height:13px;
-    border-radius:50%;
-    background:var(--surface);
-    border:2px solid var(--accent);
-  }
+  .timeline-dot{ position:absolute; left:-26px; top:3px; width:13px; height:13px; border-radius:50%; background:var(--surface); border:2px solid var(--accent); }
   .timeline-poi .timeline-dot{border-color:var(--accent);}
   .timeline-excesso_velocidade .timeline-dot{border-color:var(--danger); background:var(--danger-soft);}
   .timeline-parada_suspeita .timeline-dot{border-color:var(--warn); background:var(--warn-soft);}
-  .timeline-time{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.76rem;
-    color:var(--muted);
-    margin:0 0 2px;
-  }
-  .timeline-desc{
-    font-size:0.88rem;
-    margin:0;
-  }
+  .timeline-time{ font-family:'IBM Plex Mono', monospace; font-size:0.76rem; color:var(--muted); margin:0 0 2px; }
+  .timeline-desc{ font-size:0.88rem; margin:0; }
   .timeline-excesso_velocidade .timeline-desc{color:var(--danger);}
   .timeline-parada_suspeita .timeline-desc{color:var(--warn);}
-
-  .results{
-    display:flex;
-    flex-direction:column;
-    gap:20px;
-  }
-  .result-header{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    margin-bottom:14px;
-    flex-wrap:wrap;
-    gap:10px;
-  }
-  .result-header h2{
-    font-family:'Space Grotesk', sans-serif;
-    font-size:1.05rem;
-    margin:0;
-  }
-  .badge{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.72rem;
-    background:var(--paper);
-    border:1px solid var(--line);
-    color:var(--muted);
-    padding:3px 9px;
-    border-radius:20px;
-  }
-
-  pre.report-box{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.83rem;
-    line-height:1.7;
-    background:var(--ink);
-    color:#e7ede9;
-    padding:20px;
-    border-radius:10px;
-    overflow-x:auto;
-    white-space:pre-wrap;
-    word-break:break-word;
-    margin:0;
-  }
-
-  .summary-text{
-    font-family:'Inter', sans-serif;
-    font-size:0.9rem;
-    white-space:pre-wrap;
-    line-height:1.7;
-    background:var(--paper);
-    border:1px solid var(--line);
-    border-radius:10px;
-    padding:18px;
-  }
-
-  table.data-table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:0.85rem;
-  }
-  table.data-table th{
-    text-align:left;
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.72rem;
-    text-transform:uppercase;
-    letter-spacing:0.04em;
-    color:var(--muted);
-    border-bottom:1px solid var(--line);
-    padding:8px 10px;
-  }
-  table.data-table td{
-    padding:9px 10px;
-    border-bottom:1px solid var(--line);
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.82rem;
-  }
+  .maps-link{ display:inline-flex; vertical-align:middle; margin-left:6px; color:var(--muted); transition:color .15s ease; text-decoration:none; }
+  .maps-link:hover{color:var(--accent);}
+  .results{ display:flex; flex-direction:column; gap:20px; }
+  .result-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px; }
+  .result-header h2{ font-family:'Space Grotesk', sans-serif; font-size:1.05rem; margin:0; }
+  .badge{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; background:var(--paper); border:1px solid var(--line); color:var(--muted); padding:3px 9px; border-radius:20px; }
+  pre.report-box{ font-family:'IBM Plex Mono', monospace; font-size:0.83rem; line-height:1.7; background:var(--ink); color:#e7ede9; padding:20px; border-radius:10px; overflow-x:auto; white-space:pre-wrap; word-break:break-word; margin:0; }
+  .summary-text{ font-family:'Inter', sans-serif; font-size:0.9rem; white-space:pre-wrap; line-height:1.7; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  table.data-table{ width:100%; border-collapse:collapse; font-size:0.85rem; }
+  table.data-table th{ text-align:left; font-family:'IBM Plex Mono', monospace; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--muted); border-bottom:1px solid var(--line); padding:8px 10px; }
+  table.data-table td{ padding:9px 10px; border-bottom:1px solid var(--line); font-family:'IBM Plex Mono', monospace; font-size:0.82rem; }
   table.data-table tr:last-child td{border-bottom:none;}
-
-  .empty-state{
-    text-align:center;
-    padding:50px 20px;
-    color:var(--muted);
-  }
-  .empty-state .ring{
-    width:56px;
-    height:56px;
-    margin:0 auto 16px;
-    border-radius:50%;
-    border:1.5px dashed var(--line);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-  }
-  .empty-state .ring::after{
-    content:"";
-    width:10px;
-    height:10px;
-    border-radius:50%;
-    background:var(--line);
-  }
-  .empty-state h3{
-    font-family:'Space Grotesk', sans-serif;
-    font-size:1rem;
-    color:var(--ink);
-    margin:0 0 6px;
-  }
-  .empty-state p{
-    font-size:0.86rem;
-    max-width:340px;
-    margin:0 auto;
-  }
-
-  .poi-hidden{
-    margin-top:2px;
-    padding:0 4px;
-  }
-  .poi-hidden summary{
-    list-style:none;
-    cursor:pointer;
-    font-size:0.74rem;
-    color:var(--muted);
-    text-align:center;
-    padding:6px 0;
-  }
-  .poi-hidden summary:hover{color:var(--accent);}
-  .poi-hidden summary::-webkit-details-marker{display:none;}
-  .poi-hidden[open] summary{margin-bottom:6px;}
-
-  .poi-detail summary{
-    list-style:none;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    gap:10px;
-    flex-wrap:wrap;
-  }
-  .poi-detail summary::-webkit-details-marker{display:none;}
-  .poi-detail summary::after{
-    content:"";
-    width:8px;
-    height:8px;
-    border-right:1.5px solid var(--muted);
-    border-bottom:1.5px solid var(--muted);
-    transform:rotate(45deg);
-    transition:transform .15s ease;
-    flex:none;
-  }
-  .poi-detail[open] summary::after{
-    transform:rotate(-135deg);
-  }
-  .poi-toggle-hint{
-    font-size:0.72rem;
-    color:var(--muted);
-    font-family:'IBM Plex Mono', monospace;
-    margin-left:auto;
-  }
-
-  details.columns-detail{
-    margin-top:4px;
-  }
-  details.columns-detail summary{
-    cursor:pointer;
-    font-size:0.76rem;
-    color:var(--muted);
-  }
-  .chip-list{
-    display:flex;
-    flex-wrap:wrap;
-    gap:6px;
-    margin-top:8px;
-  }
-  .chip-list span{
-    font-family:'IBM Plex Mono', monospace;
-    font-size:0.72rem;
-    background:var(--paper);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:3px 7px;
-  }
+  .empty-state{ text-align:center; padding:50px 20px; color:var(--muted); }
+  .empty-state .ring{ width:56px; height:56px; margin:0 auto 16px; border-radius:50%; border:1.5px dashed var(--line); display:flex; align-items:center; justify-content:center; }
+  .empty-state .ring::after{ content:""; width:10px; height:10px; border-radius:50%; background:var(--line); }
+  .empty-state h3{ font-family:'Space Grotesk', sans-serif; font-size:1rem; color:var(--ink); margin:0 0 6px; }
+  .empty-state p{ font-size:0.86rem; max-width:340px; margin:0 auto; }
+  details.columns-detail{ margin-top:4px; }
+  details.columns-detail summary{ cursor:pointer; font-size:0.76rem; color:var(--muted); }
+  .chip-list{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip-list span{ font-family:'IBM Plex Mono', monospace; font-size:0.72rem; background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:3px 7px; }
 </style>
 </head>
 <body>
@@ -558,8 +124,7 @@
 
 <main class="layout">
 
-  <!-- ================= SIDEBAR / FORM ================= -->
-  <form class="sidebar" method="POST" enctype="multipart/form-data">
+  <div class="sidebar">
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -571,98 +136,131 @@
       {% endif %}
     {% endwith %}
 
-    <!-- passo 1: arquivo -->
-    <div class="card">
-      <div class="step-eyebrow">
-        <span class="num">01</span>
-        <h2>Arquivo de rastreio</h2>
+    <form method="POST" enctype="multipart/form-data">
+      <div class="card">
+        <div class="step-eyebrow"><span class="num">01</span><h2>Arquivo de rastreio</h2></div>
+        {% if file_name %}<div class="file-chip"><span class="dot"></span>{{ file_name }}</div>{% endif %}
+        <div class="field">
+          <label for="arquivo">CSV ou Excel de rastreio</label>
+          <input type="file" id="arquivo" name="arquivo" accept=".csv,.xls,.xlsx">
+          <p class="hint">Envie o arquivo de rastreio para gerar relatórios e timelines.</p>
+        </div>
+        <div class="field">
+          <label>Tipo de veículo (define o limite de excesso de velocidade)</label>
+          <div class="vehicle-type-toggle">
+            <label class="vt-option">
+              <input type="radio" name="tipo_veiculo" value="pesado" {% if tipo_veiculo != "leve" %}checked{% endif %}>
+              <span>Pesado <small>caminhão/carreta &middot; 95 km/h</small></span>
+            </label>
+            <label class="vt-option">
+              <input type="radio" name="tipo_veiculo" value="leve" {% if tipo_veiculo == "leve" %}checked{% endif %}>
+              <span>Leve <small>carro &middot; 110 km/h</small></span>
+            </label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="raio_suspeita">Raio de tolerância pra parada suspeita (metros)</label>
+          <input type="number" id="raio_suspeita" name="raio_suspeita" min="10" step="10" value="{{ raio_suspeita|int }}">
+          <p class="hint">
+            {% if saved_pois_count %}
+              Com POIs cadastrados, uma parada só é "suspeita" quando o nome do POI da linha não bate com nenhum POI conhecido. Esse raio só é usado como reserva, se nenhum POI estiver cadastrado.
+            {% else %}
+              Quanto <strong>maior</strong> o número, menos paradas são marcadas como suspeitas. Cadastre POIs em "Gerenciar POIs" pra um critério mais preciso.
+            {% endif %}
+          </p>
+        </div>
+        {% if columns %}
+          <details class="columns-detail">
+            <summary>Colunas detectadas ({{ columns|length }})</summary>
+            <div class="chip-list">{% for col in columns %}<span>{{ col }}</span>{% endfor %}</div>
+          </details>
+        {% endif %}
       </div>
 
-      {% if file_name %}
-        <div class="file-chip"><span class="dot"></span>{{ file_name }}</div>
-      {% endif %}
-
-      <div class="field">
-        <label for="arquivo">CSV ou Excel</label>
-        <input type="file" id="arquivo" name="arquivo" accept=".csv,.xls,.xlsx">
-        <p class="hint">Envie um novo arquivo para substituir o atual.</p>
-      </div>
-
-      <div class="field">
-        <label>Tipo de veículo (define o limite de excesso de velocidade)</label>
-        <div class="vehicle-type-toggle">
-          <label class="vt-option">
-            <input type="radio" name="tipo_veiculo" value="pesado" {% if tipo_veiculo != "leve" %}checked{% endif %}>
-            <span>Pesado <small>caminhão/carreta &middot; 95 km/h</small></span>
-          </label>
-          <label class="vt-option">
-            <input type="radio" name="tipo_veiculo" value="leve" {% if tipo_veiculo == "leve" %}checked{% endif %}>
-            <span>Leve <small>carro &middot; 110 km/h</small></span>
-          </label>
+      <div class="card">
+        <div class="step-eyebrow"><span class="num">02</span><h2>Veículo</h2></div>
+        <div class="field">
+          <label for="placa">Placa</label>
+          {% if placas %}
+            <select id="placa" name="placa">
+              {% for p in placas %}<option value="{{ p }}" {% if p == placa_escolhida %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            </select>
+          {% else %}
+            <select id="placa" name="placa" disabled><option>Envie um arquivo primeiro</option></select>
+          {% endif %}
         </div>
       </div>
 
-      {% if columns %}
-        <details class="columns-detail">
-          <summary>Colunas detectadas ({{ columns|length }})</summary>
-          <div class="chip-list">
-            {% for col in columns %}
-              <span>{{ col }}</span>
-            {% endfor %}
-          </div>
-        </details>
-      {% endif %}
-    </div>
-
-    <!-- placa -->
-    <div class="card">
-      <div class="step-eyebrow">
-        <span class="num">02</span>
-        <h2>Veículo</h2>
+      <div class="card">
+        <div class="step-eyebrow"><span class="num">03</span><h2>Gerar</h2></div>
+        <div class="actions">
+          <button type="submit" name="action" value="analyze" class="btn-primary">Analisar placa selecionada</button>
+          <button type="submit" name="action" value="timeline" class="btn-secondary">Timeline de viagem (placa selecionada)</button>
+          <button type="submit" name="action" value="summary" class="btn-secondary">Resumo geral (todas as placas)</button>
+          <button type="submit" name="action" value="summary_latest" class="btn-secondary">Resumo rápido (último estado)</button>
+        </div>
       </div>
-      <div class="field">
-        <label for="placa">Placa</label>
-        {% if placas %}
-          <select id="placa" name="placa">
-            {% for p in placas %}
-              <option value="{{ p }}" {% if p == placa_escolhida %}selected{% endif %}>{{ p }}</option>
-            {% endfor %}
-          </select>
+    </form>
+
+    <form method="POST" enctype="multipart/form-data">
+      <div class="card">
+        <div class="step-eyebrow"><span class="num">04</span><h2>Importar POIs</h2></div>
+        <div class="field">
+          <label for="arquivo_pois">CSV ou Excel de POIs</label>
+          <input type="file" id="arquivo_pois" name="arquivo_pois" accept=".csv,.xls,.xlsx">
+          <p class="hint">Sobe uma planilha inteira de POIs de uma vez.</p>
+        </div>
+        <div class="field"><button type="submit" name="action" value="import_pois" class="btn-secondary">Importar POIs</button></div>
+        {% if saved_pois_count %}
+          <p class="hint"><strong>{{ saved_pois_count }}</strong> POI{{ 's' if saved_pois_count != 1 else '' }} já cadastrados no banco.</p>
         {% else %}
-          <select id="placa" name="placa" disabled>
-            <option>Envie um arquivo primeiro</option>
-          </select>
+          <p class="hint">Nenhum POI cadastrado ainda.</p>
         {% endif %}
       </div>
-    </div>
+    </form>
 
-    <!-- passo 3: ações -->
-    <div class="card">
-      <div class="step-eyebrow">
-        <span class="num">03</span>
-        <h2>Gerar</h2>
+    <form method="POST" enctype="multipart/form-data">
+      <div class="card">
+        <div class="step-eyebrow"><span class="num">05</span><h2>Gerenciar POIs</h2></div>
+        <input type="hidden" name="selected_poi" value="{{ selected_poi_id }}" id="selected_poi_hidden">
+        <div class="field">
+          <label for="selected_poi">POI salvo</label>
+          <select id="selected_poi" name="selected_poi" onchange="document.getElementById('selected_poi_hidden').value=this.value;">
+            <option value="">Novo POI</option>
+            {% for poi in saved_pois %}<option value="{{ poi.id }}" {% if poi.id|string == selected_poi_id|string %}selected{% endif %}>{{ poi.nome }} ({{ poi.tipo }})</option>{% endfor %}
+          </select>
+          <p class="hint">Escolha um POI e clique em "Carregar POI" pra editar, ou deixe em "Novo POI" pra cadastrar um.</p>
+        </div>
+        <div class="field"><label for="poi_nome">Nome</label><input type="text" id="poi_nome" name="poi_nome" value="{{ poi_form_data.nome }}"></div>
+        <div class="field"><label for="poi_tipo">Tipo</label><input type="text" id="poi_tipo" name="poi_tipo" value="{{ poi_form_data.tipo }}"></div>
+        <div class="field"><label for="poi_latitude">Latitude</label><input type="text" id="poi_latitude" name="poi_latitude" value="{{ poi_form_data.latitude }}"></div>
+        <div class="field"><label for="poi_longitude">Longitude</label><input type="text" id="poi_longitude" name="poi_longitude" value="{{ poi_form_data.longitude }}"></div>
+        <div class="field"><label for="poi_cidade">Cidade</label><input type="text" id="poi_cidade" name="poi_cidade" value="{{ poi_form_data.cidade }}"></div>
+        <div class="field"><label for="poi_estado">Estado</label><input type="text" id="poi_estado" name="poi_estado" value="{{ poi_form_data.estado }}"></div>
+        <div class="field"><label for="poi_rodovia">Rodovia</label><input type="text" id="poi_rodovia" name="poi_rodovia" value="{{ poi_form_data.rodovia }}"></div>
+        <div class="field"><label for="poi_raio_metros">Raio de detecção (m)</label><input type="number" id="poi_raio_metros" name="poi_raio_metros" min="10" step="10" value="{{ poi_form_data.raio_metros }}"></div>
+        <div class="field"><label for="poi_tempo_parado_seg">Tempo parado (segundos)</label><input type="number" id="poi_tempo_parado_seg" name="poi_tempo_parado_seg" min="10" step="10" value="{{ poi_form_data.tempo_parado_seg }}"></div>
+        <div class="field"><label for="poi_velocidade_maxima_kmh">Velocidade máxima (km/h)</label><input type="number" id="poi_velocidade_maxima_kmh" name="poi_velocidade_maxima_kmh" min="1" step="1" value="{{ poi_form_data.velocidade_maxima_kmh }}"></div>
+        <div class="actions">
+          <button type="submit" name="action" value="load_poi" class="btn-secondary">Carregar POI</button>
+          <button type="submit" name="action" value="save_poi" class="btn-primary">Salvar POI</button>
+          <button type="submit" name="action" value="delete_poi" class="btn-secondary">Excluir POI</button>
+          <button type="submit" name="action" value="clear_pois" class="btn-secondary">Limpar todos os POIs</button>
+        </div>
       </div>
-      <div class="actions">
-        <button type="submit" name="action" value="analyze" class="btn-primary">Analisar placa selecionada</button>
-        <button type="submit" name="action" value="timeline" class="btn-secondary">Timeline de viagem (placa selecionada)</button>
-        <button type="submit" name="action" value="summary" class="btn-secondary">Resumo geral (todas as placas)</button>
-        <button type="submit" name="action" value="summary_latest" class="btn-secondary">Resumo rápido (último estado)</button>
-      </div>
-    </div>
+    </form>
 
-    <!-- pois: escondido, fora do fluxo principal -->
-    <details class="poi-hidden">
-      <summary>Configurações avançadas</summary>
+    <details class="columns-detail" style="padding:0 4px;">
+      <summary>Configurações avançadas (POIs em texto)</summary>
       <div class="field" style="margin-top:10px;">
         <label for="pois">Pontos de interesse (um por linha)</label>
-        <textarea id="pois" name="pois" spellcheck="false">{{ pois_text }}</textarea>
-        <p class="hint">nome:tipo:latitude:longitude:raio_m:tempo_parado_s:velocidade_max_kmh</p>
+        <textarea id="pois" name="pois" form="form-analise-oculto" rows="4" style="font-size:0.72rem;">{{ pois_text }}</textarea>
+        <p class="hint">nome:tipo:latitude:longitude:raio_m:tempo_parado_s:velocidade_max_kmh (somado aos POIs cadastrados no banco)</p>
       </div>
     </details>
 
-  </form>
+  </div>
 
-  <!-- ================= RESULTADOS ================= -->
   <section class="results">
 
     <div class="tabs">
@@ -675,77 +273,44 @@
     </div>
 
     <div class="tab-panel active" id="tab-relatorio">
-
-    {% if report %}
-      <div class="card">
-        <div class="result-header">
-          <h2>Relatório da placa</h2>
-          {% if placa_escolhida %}<span class="badge">{{ placa_escolhida }}</span>{% endif %}
+      {% if report %}
+        <div class="card">
+          <div class="result-header"><h2>Relatório da placa</h2>{% if placa_escolhida %}<span class="badge">{{ placa_escolhida }}</span>{% endif %}</div>
+          <pre class="report-box">{{ report }}</pre>
         </div>
-        <pre class="report-box">{{ report }}</pre>
-      </div>
-    {% endif %}
-
-    {% if resumo_geral %}
-      <div class="card">
-        <div class="result-header">
-          <h2>Resumo geral por placa</h2>
-          {% if docx_available %}
-            <a class="btn-download" href="/download_word">Baixar em Word (.docx)</a>
-          {% endif %}
+      {% endif %}
+      {% if resumo_geral %}
+        <div class="card">
+          <div class="result-header">
+            <h2>Resumo geral por placa</h2>
+            {% if docx_available %}<a class="btn-download" href="/download_word">Baixar em Word (.docx)</a>{% endif %}
+          </div>
+          <div class="summary-text">{{ resumo_geral }}</div>
         </div>
-        <div class="summary-text">{{ resumo_geral }}</div>
-      </div>
-    {% endif %}
-
-    {% if missing_rows %}
-      <div class="card">
-        <div class="result-header">
-          <h2>Períodos sem POI identificado</h2>
-          <span class="badge">{{ missing_rows|length }} período(s)</span>
+      {% endif %}
+      {% if missing_rows %}
+        <div class="card">
+          <div class="result-header"><h2>Períodos sem POI identificado</h2><span class="badge">{{ missing_rows|length }} período(s)</span></div>
+          <table class="data-table">
+            <thead><tr>{% for col in missing_columns %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in missing_rows %}<tr>{% for col in missing_columns %}<td>{{ row[col] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          </table>
+          {% if missing_rows|length >= 30 %}<p class="hint" style="margin-top:12px;">Mostrando apenas as primeiras 30 paradas.</p>{% endif %}
         </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              {% for col in missing_columns %}
-                <th>{{ col }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in missing_rows %}
-              <tr>
-                {% for col in missing_columns %}
-                  <td>{{ row[col] }}</td>
-                {% endfor %}
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% if missing_rows|length >= 30 %}
-          <p class="hint" style="margin-top:12px;">Mostrando apenas as primeiras 30 paradas.</p>
-        {% endif %}
-      </div>
-    {% endif %}
-
-    {% if not report and not resumo_geral and not missing_rows %}
-      <div class="card empty-state">
-        <div class="ring"></div>
-        <h3>Nenhum resultado ainda</h3>
-        <p>Envie um arquivo, confira os pontos de interesse e escolha uma das opções em &ldquo;Gerar&rdquo; para ver o relatório aqui.</p>
-      </div>
-    {% endif %}
-
+      {% endif %}
+      {% if not report and not resumo_geral and not missing_rows %}
+        <div class="card empty-state">
+          <div class="ring"></div>
+          <h3>Nenhum resultado ainda</h3>
+          <p>Envie um arquivo, escolha a placa e clique em uma das opções em &ldquo;Gerar&rdquo; para ver o relatório aqui.</p>
+        </div>
+      {% endif %}
     </div>
 
     <div class="tab-panel" id="tab-timeline">
       <div class="card">
-        <div class="result-header">
-          <h2>Timeline de viagem</h2>
-          {% if placa_escolhida %}<span class="badge">{{ placa_escolhida }}</span>{% endif %}
-        </div>
+        <div class="result-header"><h2>Timeline de viagem</h2>{% if placa_escolhida %}<span class="badge">{{ placa_escolhida }}</span>{% endif %}</div>
         <p class="hint" style="margin:-6px 0 16px;">Chegadas/saídas de POI, excesso de velocidade e paradas suspeitas da placa selecionada, em ordem cronológica.</p>
-
         {% if timeline_eventos %}
           <div class="timeline">
             {% for evento in timeline_eventos %}
@@ -759,6 +324,15 @@
                   {% if evento['tipo'] == 'poi' %}
                     <p class="timeline-desc">
                       {% if evento['em_andamento'] %}Está em <strong>{{ evento['local'] }}</strong> desde o horário acima{% else %}Parada em <strong>{{ evento['local'] }}</strong>{% endif %}
+                      {% if evento['latitude'] and evento['longitude'] %}
+                        <a class="maps-link" href="https://www.google.com/maps/search/?api=1&query={{ evento['latitude'] }},{{ evento['longitude'] }}" target="_blank" rel="noopener" title="Abrir no Google Maps">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        </a>
+                      {% elif evento['search_query'] %}
+                        <a class="maps-link" href="https://www.google.com/maps/search/?api=1&query={{ evento['search_query']|urlencode }}" target="_blank" rel="noopener" title="Abrir no Google Maps">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                        </a>
+                      {% endif %}
                     </p>
                   {% elif evento['tipo'] == 'excesso_velocidade' %}
                     <p class="timeline-desc">Excesso de velocidade &mdash; pico de <strong>{{ evento['velocidade_maxima']|round(0, 'floor')|int }} km/h</strong></p>
@@ -783,28 +357,21 @@
       <div class="card">
         <div class="result-header">
           <h2>Paradas suspeitas</h2>
-          <span class="badge">todas as placas</span>
+          {% if placa_escolhida %}<span class="badge">{{ placa_escolhida }}</span>{% else %}<span class="badge">todas as placas</span>{% endif %}
         </div>
-        <p class="hint" style="margin:-6px 0 16px;">Paradas acima de 10 minutos em um local sem POI identificado, em qualquer veículo do arquivo carregado.</p>
-
+        <p class="hint" style="margin:-6px 0 16px;">
+          {% if placa_escolhida %}
+            Paradas acima de 10 minutos sem bater com nenhum POI cadastrado, só da placa <strong>{{ placa_escolhida }}</strong>.
+          {% else %}
+            Paradas acima de 10 minutos sem bater com nenhum POI cadastrado, em qualquer veículo do arquivo carregado.
+          {% endif %}
+        </p>
         {% if paradas_suspeitas %}
           <table class="data-table">
-            <thead>
-              <tr>
-                <th>Placa</th>
-                <th>Início</th>
-                <th>Fim</th>
-                <th>Duração</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Placa</th><th>Início</th><th>Fim</th><th>Duração</th></tr></thead>
             <tbody>
               {% for item in paradas_suspeitas %}
-                <tr>
-                  <td>{{ item["Placa"] }}</td>
-                  <td>{{ item["Início"] }}</td>
-                  <td>{{ item["Fim"] }}</td>
-                  <td>{{ item["Duração"] }}</td>
-                </tr>
+                <tr><td>{{ item["Placa"] }}</td><td>{{ item["Início"] }}</td><td>{{ item["Fim"] }}</td><td>{{ item["Duração"] }}</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -812,7 +379,7 @@
           <div class="empty-state" style="padding:30px 20px;">
             <div class="ring"></div>
             <h3>Nenhuma parada suspeita</h3>
-            <p>Nenhum veículo ficou parado por mais de 10 minutos em um local sem POI identificado.</p>
+            <p>Nenhum veículo ficou parado por mais de 10 minutos sem bater com um POI cadastrado.</p>
           </div>
         {% endif %}
       </div>
@@ -821,6 +388,8 @@
   </section>
 
 </main>
+
+<form id="form-analise-oculto" style="display:none;"></form>
 
 <script>
   function mudarAba(nome){
