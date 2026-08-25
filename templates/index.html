@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análise Inteligente de Frotas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sidebar-w: 320px;
+    --bg-page: #f8fafc;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    
+    /* Cores Neutras do Sistema */
+    --neutral-dark: #1e293b;
+    --neutral-hover: #0f172a;
+    --neutral-soft: #f1f5f9;
+    
+    /* Destaques de IA */
+    --ai-purple: #7c3aed;
+    --ai-purple-soft: #f5f3ff;
+    --ai-border: #ddd6fe;
+    
+    /* Alertas */
+    --danger: #b91c1c;
+    --danger-soft: #fef2f2;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+    --radius: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg-page); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.88rem; display: flex; min-height: 100vh; }
+
+  /* SIDEBAR FIXA */
+  aside.app-sidebar {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+
+  .sidebar-header { padding: 20px 22px; border-bottom: 1px solid var(--border); }
+  .sidebar-header h1 { font-size: 1.05rem; font-weight: 700; color: var(--text-main); letter-spacing: -0.01em; }
+  .sidebar-header p { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+
+  .sidebar-body { padding: 20px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+
+  input[type="file"], input[type="number"], input[type="text"], select, textarea {
+    font-family: inherit;
+    font-size: 0.82rem;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: #ffffff;
+    color: var(--text-main);
+    outline: none;
+    transition: all 0.15s ease;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--neutral-dark); box-shadow: 0 0 0 2px var(--neutral-soft); }
+
+  .pill-segmented { display: grid; grid-template-columns: 1fr 1fr; background: var(--neutral-soft); padding: 3px; border-radius: 6px; border: 1px solid var(--border); }
+  .pill-segmented label { text-align: center; padding: 6px; font-size: 0.76rem; font-weight: 600; color: var(--text-muted); cursor: pointer; border-radius: 4px; margin: 0; text-transform: none; }
+  .pill-segmented input { display: none; }
+  .pill-segmented label:has(input:checked) { background: #ffffff; color: var(--neutral-dark); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+  button, .btn {
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 9px 14px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+  .btn-primary { background: var(--neutral-dark); color: #ffffff; }
+  .btn-primary:hover { background: var(--neutral-hover); }
+  .btn-secondary { background: #ffffff; color: var(--text-main); border-color: var(--border-strong); }
+  .btn-secondary:hover { background: var(--neutral-soft); }
+
+  /* BOTÃO IA DESTACADO */
+  .btn-ai {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: #ffffff;
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.2);
+  }
+  .btn-ai:hover { opacity: 0.95; }
+
+  .sidebar-footer { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; background: #fafbfc; }
+
+  /* ÁREA PRINCIPAL */
+  main.main-viewport { flex: 1; padding: 28px 36px; display: flex; flex-direction: column; gap: 20px; max-width: 1300px; }
+  .viewport-header { display: flex; justify-content: space-between; align-items: center; }
+  .ai-tag { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; font-weight: 700; background: var(--ai-purple-soft); color: var(--ai-purple); border: 1px solid var(--ai-border); padding: 4px 10px; border-radius: 20px; }
+  .ai-sparkle { font-size: 0.85rem; }
+
+  /* CONTAINER DO DOCUMENTO */
+  .doc-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,0.02); overflow: hidden; }
+  .doc-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid var(--border); padding: 0 16px; gap: 4px; }
+  .doc-tab { background: none; border: none; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); padding: 12px 16px; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+  .doc-tab:hover { color: var(--text-main); }
+  .doc-tab.active { color: var(--neutral-dark); border-bottom-color: var(--neutral-dark); background: #ffffff; }
+  .doc-panel { display: none; padding: 24px; }
+  .doc-panel.active { display: block; }
+
+  .report-paper { font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; line-height: 1.75; background: #fafbfc; color: #1e293b; padding: 22px; border-radius: 6px; border: 1px solid var(--border); max-height: 600px; overflow-y: auto; white-space: pre-wrap; }
+  .summary-paper { font-size: 0.88rem; line-height: 1.8; background: #ffffff; padding: 8px; white-space: pre-wrap; }
+
+  /* TABELAS */
+  .table-box { overflow-x: auto; max-height: 540px; border: 1px solid var(--border); border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { text-align: left; padding: 11px 14px; color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border); background: #f8fafc; position: sticky; top: 0; }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+
+  .chip { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .chip-neutral { background: var(--neutral-soft); color: var(--neutral-dark); }
+  .chip-red { background: var(--danger-soft); color: var(--danger); }
+  .chip-warn { background: var(--warn-soft); color: var(--warn); }
+
+  /* BUSCADORES */
+  .search-input { width: 100%; padding: 8px 12px; font-size: 0.82rem; border: 1px solid var(--border-strong); border-radius: 6px; margin-bottom: 10px; }
+
+  /* MODAIS */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+  .modal-overlay.active { display: flex; }
+  .modal-window { background: #ffffff; border-radius: var(--radius); width: 100%; max-width: 640px; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 16px 36px rgba(0,0,0,0.12); }
+  .modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .modal-body { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .modal-foot { padding: 12px 20px; border-top: 1px solid var(--border); background: #f8fafc; display: flex; justify-content: space-between; align-items: center; }
+
+  .empty-state { text-align: center; color: var(--text-muted); padding: 50px 20px; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR FIXA -->
+<aside class="app-sidebar">
+  <div class="sidebar-header">
+    <h1>Análise Inteligente de Frotas</h1>
+    <p>Auditoria & Telemetria com IA</p>
+  </div>
+
+  <form method="POST" enctype="multipart/form-data" class="sidebar-body">
+    
+    <div class="form-group">
+      <label>Planilha (.xlsx, .csv)</label>
+      <input type="file" name="arquivo" accept=".csv,.xls,.xlsx">
+      {% if file_name %}
+        <span style="font-size: 0.72rem; color: var(--neutral-dark); font-weight: 600; margin-top: 2px;">{{ file_name }}</span>
+      {% endif %}
+    </div>
+
+    <div class="form-group">
+      <label>Perfil da Frota</label>
+      <div class="pill-segmented">
+        <label><input type="radio" name="tipo_veiculo" value="pesado" {% if tipo_veiculo != "leve" %}checked{% endif %}> Pesado</label>
+        <label><input type="radio" name="tipo_veiculo" value="leve" {% if tipo_veiculo == "leve" %}checked{% endif %}> Leve</label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Tolerância (metros)</label>
+      <input type="number" name="raio_suspeita" min="10" step="10" value="{{ raio_suspeita|int }}">
+    </div>
+
+    <div class="form-group">
+      <label>Placa para Análise</label>
+      <select name="placa" {% if not placas %}disabled{% endif %}>
+        {% if placas %}
+          {% for p in placas %}
+            <option value="{{ p }}" {% if p == placa_escolhida %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        {% else %}
+          <option>Aguardando planilha...</option>
+        {% endif %}
+      </select>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+      <button type="submit" name="action" value="analyze" class="btn btn-primary">Analisar Placa</button>
+      <button type="submit" name="action" value="timeline" class="btn btn-secondary">Timeline da Placa</button>
+      <button type="submit" name="action" value="summary" class="btn btn-secondary">Resumo Consolidado</button>
+    </div>
+
+  </form>
+
+  <div class="sidebar-footer">
+    <button type="button" class="btn btn-ai" onclick="abrirModalRegras()">
+      <span class="ai-sparkle" style="margin-right: 6px;">✦</span> Regras IA ({{ regras_salvas|length if regras_salvas else 0 }})
+    </button>
+    <button type="button" class="btn btn-secondary" onclick="abrirModalPOIs()" style="font-size: 0.78rem; padding: 7px;">
+      Base de POIs ({{ pois_salvos|length if pois_salvos else 0 }})
+    </button>
+  </div>
+</aside>
+
+<!-- CONTEÚDO PRINCIPAL -->
+<main class="main-viewport">
+  
+  <div class="viewport-header">
+    <div>
+      <h2 style="font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Painel de Resultados</h2>
+      <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+        {% if placa_escolhida %}Placa ativa: <strong>{{ placa_escolhida }}</strong> &middot; {% endif %}
+        Total de veículos: <strong>{{ placas|length if placas else 0 }}</strong>
+      </p>
+    </div>
+    <div class="ai-tag">
+      <span class="ai-sparkle">✦</span> Refinamento com Inteligência Artificial
+    </div>
+  </div>
+
+  <div class="doc-container">
+    <div class="doc-tabs">
+      <button type="button" class="doc-tab active" onclick="trocarAba('relatorio')">Relatório Refinado (IA)</button>
+      <button type="button" class="doc-tab" onclick="trocarAba('timeline')">Timeline de Eventos</button>
+      <button type="button" class="doc-tab" onclick="trocarAba('suspeitas')">Paradas Não Cadastradas {% if paradas_suspeitas %}({{ paradas_suspeitas|length }}){% endif %}</button>
+    </div>
+
+    <!-- ABA 1: RELATÓRIO IA -->
+    <div class="doc-panel active" id="tab-relatorio">
+      {% if report %}
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Relatório Auditoria</span>
+          <span class="chip chip-neutral">{{ placa_escolhida }}</span>
+        </div>
+        <pre class="report-paper">{{ report }}</pre>
+      {% elif resumo_geral %}
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Resumo de Todas as Placas</span>
+          {% if docx_available %}
+            <a class="btn btn-primary" style="padding: 6px 14px; font-size: 0.78rem;" href="/download_word">Baixar Word (.docx)</a>
+          {% endif %}
+        </div>
+        <div class="summary-paper">{{ resumo_geral }}</div>
+      {% else %}
+        <div class="empty-state">Carregue a planilha na barra lateral e selecione uma ação para visualizar os dados.</div>
+      {% endif %}
+    </div>
+
+    <!-- ABA 2: TIMELINE -->
+    <div class="doc-panel" id="tab-timeline">
+      {% if timeline_eventos %}
+        <div class="table-box">
+          <table>
+            <thead>
+              <tr><th>Início</th><th>Fim</th><th>Evento</th></tr>
+            </thead>
+            <tbody>
+              {% for ev in timeline_eventos %}
+                <tr>
+                  <td style="font-family: 'JetBrains Mono', monospace;">{{ ev['inicio'] }}</td>
+                  <td style="font-family: 'JetBrains Mono', monospace;">{{ ev['fim'] or '-' }}</td>
+                  <td>
+                    {% if ev['tipo'] == 'poi' %}Parada em: <strong>{{ ev['local'] }}</strong>
+                    {% elif ev['tipo'] == 'excesso_velocidade' %}<span class="chip chip-red">Excesso: {{ ev['velocidade_maxima']|int }} km/h</span>
+                    {% else %}<span class="chip chip-warn">Parada fora da base</span>{% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">Nenhuma timeline gerada.</div>
+      {% endif %}
+    </div>
+
+    <!-- ABA 3: PARADAS SUSPEITAS -->
+    <div class="doc-panel" id="tab-suspeitas">
+      {% if paradas_suspeitas %}
+        <div class="table-box">
+          <table>
+            <thead>
+              <tr><th>Placa</th><th>Início</th><th>Fim</th><th>Duração</th></tr>
+            </thead>
+            <tbody>
+              {% for item in paradas_suspeitas %}
+                <tr>
+                  <td style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">{{ item["Placa"] }}</td>
+                  <td style="font-family: 'JetBrains Mono', monospace;">{{ item["Início"] }}</td>
+                  <td style="font-family: 'JetBrains Mono', monospace;">{{ item["Fim"] }}</td>
+                  <td>{{ item["Duração"] }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="empty-state">Nenhuma parada não identificada detectada.</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</main>
+
+<!-- MODAL POIs COM BUSCA E EXCLUSÃO -->
+<div class="modal-overlay" id="modalPOIs">
+  <div class="modal-window">
+    <div class="modal-head">
+      <h3 style="font-size: 0.95rem; font-weight: 700;">Base de Pontos de Interesse (POIs)</h3>
+      <button type="button" onclick="fecharModalPOIs()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+    </div>
+    
+    <div class="modal-body">
+      <!-- Upload Planilha POIs -->
+      <form method="POST" enctype="multipart/form-data" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+        <label style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px;">Importar Nova Planilha de POIs</label>
+        <input type="file" name="arquivo_pois" accept=".csv,.xls,.xlsx" style="width: 100%;">
+        <button type="submit" name="action" value="import_pois" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Atualizar Base com Planilha</button>
+      </form>
+
+      <!-- Lista POIs -->
+      <form id="formExclusaoPOIs" method="POST" action="/excluir_pois">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+            POIs Cadastrados (<span id="contagemPOIs">{{ pois_salvos|length if pois_salvos else 0 }}</span>)
+          </span>
+          {% if pois_salvos %}
+            <label style="font-size: 0.74rem; color: var(--neutral-dark); cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600;">
+              <input type="checkbox" onchange="document.querySelectorAll('.poi-checkbox').forEach(c => c.checked = this.checked)"> Selecionar Todos
+            </label>
+          {% endif %}
+        </div>
+
+        {% if pois_salvos %}
+          <input type="text" class="search-input" placeholder="🔍 Digite para filtrar POIs pelo nome..." onkeyup="filtrarPOIs(this.value)">
+        {% endif %}
+
+        {% if pois_salvos %}
+          <div class="table-box" style="max-height: 240px;">
+            <table id="tabelaPOIs">
+              <thead>
+                <tr>
+                  <th style="width: 32px;"></th>
+                  <th>Nome do Local</th>
+                  <th>Raio</th>
+                  <th>Coordenadas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for p in pois_salvos %}
+                  <tr class="poi-row">
+                    <td>
+                      <input type="checkbox" name="poi_ids" value="{{ p.id }}" class="poi-checkbox" style="accent-color: var(--danger);">
+                    </td>
+                    <td class="poi-name" style="font-weight: 600;">{{ p.nome }}</td>
+                    <td>{{ p.raio_metros|int }}m</td>
+                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-muted);">
+                      {{ "%.4f"|format(p.latitude) }}, {{ "%.4f"|format(p.longitude) }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="empty-state" style="padding: 25px 0;">Nenhum Ponto de Interesse cadastrado no banco.</p>
+        {% endif %}
+      </form>
+    </div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-secondary" onclick="fecharModalPOIs()">Fechar</button>
+      {% if pois_salvos %}
+        <button type="button" onclick="confirmarExclusaoPOIsModal()" style="background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); border-radius: 6px; padding: 6px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Excluir Selecionados</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REGRAS IA -->
+<div class="modal-overlay" id="modalRegras">
+  <div class="modal-window">
+    <div class="modal-head" style="border-bottom-color: var(--ai-border); background: var(--ai-purple-soft);">
+      <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--ai-purple); display: flex; align-items: center; gap: 6px;">
+        <span>✦</span> Regras de Negócio (Inteligência Artificial)
+      </h3>
+      <button type="button" onclick="fecharModalRegras()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- Formulário Regras -->
+      <form method="POST" action="/adicionar_regra_feedback" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+        <div style="margin-bottom: 8px;">
+          <label style="font-size: 0.74rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px;">Categoria</label>
+          <select name="categoria" style="width: 100%; font-size: 0.8rem; padding: 6px;">
+            <option value="NOMENCLATURA">Nomenclatura / Substituição de Termos</option>
+            <option value="GERAL">Geral</option>
+            <option value="FORMATACAO">Formatação</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 0.74rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px;">Instrução para o Modelo de IA</label>
+          <textarea name="descricao_regra" rows="2" placeholder="Ex: Substitua CD Mart Minas por Centro de Distribuição Mart Minas." style="width: 100%; font-size: 0.8rem; padding: 6px;" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-ai" style="width: 100%; margin-top: 8px;">Salvar Instrução de IA</button>
+      </form>
+
+      <!-- Lista Regras -->
+      <form id="formExclusaoEmLote" method="POST" action="/excluir_regras">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Instruções Cadastradas</span>
+          {% if regras_salvas %}
+            <label style="font-size: 0.74rem; color: var(--ai-purple); cursor: pointer; display: flex; align-items: center; gap: 4px; font-weight: 600;">
+              <input type="checkbox" onchange="document.querySelectorAll('.item-checkbox').forEach(c => c.checked = this.checked)"> Selecionar Todas
+            </label>
+          {% endif %}
+        </div>
+
+        {% if regras_salvas %}
+          <input type="text" class="search-input" placeholder="🔍 Digite para filtrar regras..." onkeyup="filtrarRegras(this.value)">
+        {% endif %}
+
+        {% if regras_salvas %}
+          <div id="listaRegras" style="display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto;">
+            {% for r in regras_salvas %}
+              <label class="regra-item" style="border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 10px; background: #fff; cursor: pointer;">
+                <input type="checkbox" name="regra_ids" value="{{ r.id }}" class="item-checkbox" style="margin-top: 2px; accent-color: var(--danger);">
+                <div>
+                  <span class="chip" style="background: var(--ai-purple-soft); color: var(--ai-purple);">{{ r.categoria }}</span>
+                  <p class="regra-desc" style="margin-top: 3px; font-size: 0.8rem; color: var(--text-main);">{{ r.descricao }}</p>
+                </div>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-state" style="padding: 20px 0;">Nenhuma instrução ativa.</p>
+        {% endif %}
+      </form>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-secondary" onclick="fecharModalRegras()">Fechar</button>
+      {% if regras_salvas %}
+        <button type="button" onclick="confirmarExclusaoModal()" style="background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); border-radius: 6px; padding: 6px 12px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Excluir Selecionadas</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRMAÇÃO NATIVO -->
+<div class="modal-overlay" id="modalConfirmacao" style="z-index: 10000;">
+  <div class="modal-window" style="max-width: 380px; padding: 20px; text-align: center;">
+    <h4 style="font-size: 0.95rem; margin-bottom: 6px;">Confirmar Exclusão</h4>
+    <p id="msgConfirmacao" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px;"></p>
+    <div style="display: flex; gap: 8px;">
+      <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('modalConfirmacao').classList.remove('active')">Cancelar</button>
+      <button type="button" id="btnConfirmarAcao" class="btn" style="background: var(--danger); color: #fff; flex: 1;">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function trocarAba(id) {
+    document.querySelectorAll('.doc-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.doc-panel').forEach(p => p.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    document.getElementById('tab-' + id).classList.add('active');
+  }
+
+  function abrirModalRegras() { document.getElementById('modalRegras').classList.add('active'); }
+  function fecharModalRegras() { document.getElementById('modalRegras').classList.remove('active'); }
+
+  function abrirModalPOIs() { document.getElementById('modalPOIs').classList.add('active'); }
+  function fecharModalPOIs() { document.getElementById('modalPOIs').classList.remove('active'); }
+
+  function filtrarPOIs(termo) {
+    termo = termo.toLowerCase();
+    document.querySelectorAll('.poi-row').forEach(row => {
+      const nome = row.querySelector('.poi-name').innerText.toLowerCase();
+      row.style.display = nome.includes(termo) ? '' : 'none';
+    });
+  }
+
+  function filtrarRegras(termo) {
+    termo = termo.toLowerCase();
+    document.querySelectorAll('.regra-item').forEach(item => {
+      const desc = item.querySelector('.regra-desc').innerText.toLowerCase();
+      item.style.display = desc.includes(termo) ? 'flex' : 'none';
+    });
+  }
+
+  function confirmarExclusaoModal() {
+    const total = document.querySelectorAll('.item-checkbox:checked').length;
+    if (total === 0) return alert('Selecione ao menos uma regra.');
+    document.getElementById('msgConfirmacao').innerText = `Deseja realmente excluir permanentemente ${total} regra(s) selecionada(s)?`;
+    document.getElementById('btnConfirmarAcao').onclick = function() {
+      document.getElementById('formExclusaoEmLote').submit();
+    };
+    document.getElementById('modalConfirmacao').classList.add('active');
+  }
+
+  function confirmarExclusaoPOIsModal() {
+    const total = document.querySelectorAll('.poi-checkbox:checked').length;
+    if (total === 0) return alert('Selecione ao menos um POI.');
+    document.getElementById('msgConfirmacao').innerText = `Deseja realmente excluir permanentemente ${total} Ponto(s) de Interesse selecionado(s)?`;
+    document.getElementById('btnConfirmarAcao').onclick = function() {
+      document.getElementById('formExclusaoPOIs').submit();
+    };
+    document.getElementById('modalConfirmacao').classList.add('active');
+  }
+</script>
+
+</body>
+</html>
