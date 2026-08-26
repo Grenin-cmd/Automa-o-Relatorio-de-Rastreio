@@ -56,12 +56,9 @@ def _persistent_data_dir() -> str:
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
 
-
-DB_PATH = os.path.join(_persistent_data_dir(), "poi_store.db")
-
-
-def _get_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
+def _get_db_connection():
+    db_path = os.path.join(_persistent_data_dir(), "poi_store.db")
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
