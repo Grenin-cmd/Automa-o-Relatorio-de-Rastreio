@@ -307,100 +307,50 @@ def _save_saved_pois(pois: list[dict[str, object]]) -> None:
         conn.close()
 
 
-def _parse_poi_dataframe(df: pd.DataFrame) -> list[dict[str, object]]:
+def _parse_poi_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
     if df.empty:
         raise ValueError("Arquivo de POIs vazio.")
 
-    working = _normalize_columns(df.copy())
+    working = df.copy()
+    working.columns = [str(col).strip() for col in working.columns]
 
-    def _find_column(aliases: list[str]) -> str | None:
-        for alias in aliases:
-            try:
-                return _resolver_coluna(working, [alias])
-            except ValueError:
-                continue
-        return None
+    col_nome = next((c for c in working.columns if any(k in c.lower() for k in ["local", "nome", "descricao", "poi", "localizacao"])), None)
+    col_lat = next((c for c in working.columns if any(k in c.lower() for k in ["lat", "latitude", "latidude"])), None)
+    col_lon = next((c for c in working.columns if any(k in c.lower() for k in ["lon", "lng", "longitude", "longitutde", "longitud"])), None)
 
-    columns = {
-        "nome": _find_column(["nome", "name", "poi", "ponto", "nome_poi", "poi_nome", "local", "localizacao", "localidade", "location"]),
-        "tipo": _find_column(["tipo", "type", "categoria", "category", "grupo", "group"]),
-        "latitude": _find_column(["latitude", "lat", "latidude"]),
-        "longitude": _find_column(["longitude", "lon", "lng", "longitutde", "longitud", "longitute"]),
-        "raio_metros": _find_column(["raio_metros", "raio", "radius", "distancia", "distance"]),
-        "tempo_parado_seg": _find_column(["tempo_parado_seg", "tempo_parado", "tempo", "tempo_segundos", "stop_time"]),
-        "velocidade_maxima_kmh": _find_column(["velocidade_maxima_kmh", "velocidade_maxima", "velocidade", "velocidade_kmh", "speed_kmh", "speed"]),
-        "cidade": _find_column(["cidade", "city"]),
-        "estado": _find_column(["estado", "state"]),
-        "rodovia": _find_column(["rodovia", "highway", "road"]),
-    }
+    if not col_lat or not col_lon:
+        raise ValueError(f"Colunas de Latitude e Longitude não encontradas. Colunas lidas: {list(working.columns)}")
 
-    missing = [key for key in ["nome", "tipo", "latitude", "longitude"] if columns[key] is None]
-    if missing:
-        raise ValueError("Arquivo de POIs inválido. Faltam colunas obrigatórias: " + ", ".join(missing))
+    def _converter_coordenada(val: Any) -> float | None:
+        if val is None or pd.isna(val):
+            return None
+        texto = str(val).strip().replace(" ", "")
+        if texto.count(".") > 1:
+            partes = texto.split(".")
+            texto = partes[0] + "." + "".join(partes[1:])
+        elif "," in texto and "." in texto:
+            texto = texto.replace(".", "").replace(",", ".")
+        elif "," in texto:
+            texto = texto.replace(",", ".")
+        try:
+            return float(texto)
+        except ValueError:
+            return None
 
-    nome_col = columns["nome"]
-    latitude_col = columns["latitude"]
-    longitude_col = columns["longitude"]
-    tipo_col = columns["tipo"]
-    cidade_col = columns["cidade"]
-    estado_col = columns["estado"]
-    rodovia_col = columns["rodovia"]
-    raio_col = columns["raio_metros"]
-    tempo_col = columns["tempo_parado_seg"]
-    velocidade_col = columns["velocidade_maxima_kmh"]
-
-    assert nome_col is not None and latitude_col is not None and longitude_col is not None
-
-    pois: list[dict[str, object]] = []
+    pois: list[dict[str, Any]] = []
     for _, row in working.iterrows():
-        nome = str(row[nome_col]).strip()
-        if not nome:
-            continue
+        nome = str(row[col_nome]).strip() if col_nome and pd.notna(row[col_nome]) else "POI sem nome"
+        lat = _converter_coordenada(row[col_lat])
+        lon = _converter_coordenada(row[col_lon])
 
-        try:
-            latitude = _parse_number(row[latitude_col], float, "Latitude ou longitude inválida no arquivo de POIs.")
-            longitude = _parse_number(row[longitude_col], float, "Latitude ou longitude inválida no arquivo de POIs.")
-        except ValueError:
-            continue
-
-        tipo = str(row[tipo_col]).strip() if tipo_col else ""
-        cidade = str(row[cidade_col]).strip() if cidade_col else ""
-        estado = str(row[estado_col]).strip() if estado_col else ""
-        rodovia = str(row[rodovia_col]).strip() if rodovia_col else ""
-
-        try:
-            raio_metros = _parse_number(row[raio_col], float, "") if raio_col and pd.notna(row[raio_col]) else 200.0
-        except ValueError:
-            raio_metros = 200.0
-
-        try:
-            tempo_parado_seg = _parse_number(row[tempo_col], int, "") if tempo_col and pd.notna(row[tempo_col]) else 120
-        except ValueError:
-            tempo_parado_seg = 120
-
-        try:
-            velocidade_maxima_kmh = _parse_number(row[velocidade_col], float, "") if velocidade_col and pd.notna(row[velocidade_col]) else 10.0
-        except ValueError:
-            velocidade_maxima_kmh = 10.0
-
-        pois.append(
-            {
-                "id": _create_poi_id(),
+        if lat is not None and lon is not None:
+            pois.append({
                 "nome": nome,
-                "tipo": tipo,
-                "latitude": latitude,
-                "longitude": longitude,
-                "cidade": cidade,
-                "estado": estado,
-                "rodovia": rodovia,
-                "raio_metros": raio_metros,
-                "tempo_parado_seg": tempo_parado_seg,
-                "velocidade_maxima_kmh": velocidade_maxima_kmh,
-            }
-        )
-
-    if not pois:
-        raise ValueError("Nenhum POI válido encontrado no arquivo.")
+                "latitude": lat,
+                "longitude": lon,
+                "raio": 200,
+                "tipo": "Geral"
+            })
 
     return pois
 
