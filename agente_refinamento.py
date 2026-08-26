@@ -189,5 +189,57 @@ INSTRUÇÕES:
                 _REFINAMENTO_CACHE.pop(next(iter(_REFINAMENTO_CACHE)))
             _REFINAMENTO_CACHE[cache_key] = resultado
 
+    def gerar_resumo_auditoria(self, estatisticas: dict[str, Any]) -> str | None:
+        """Gera um parágrafo executivo curto para o módulo de Auditoria de
+        Roteiro, a partir de um payload agregado pequeno (apenas contadores e
+        uma amostra de clientes não visitados — nunca a planilha inteira).
+
+        Retorna None (Plano B / fallback gracioso) sempre que a IA não está
+        disponível, atinge rate limit ou falha por qualquer motivo. O
+        chamador (rota Flask) deve continuar exibindo os dados brutos da
+        auditoria normalmente quando isto retornar None.
+        """
+        if not self.client:
+            self._conectar()
+        if not self.client:
+            return None
+
+        amostra_pendentes = estatisticas.get("clientes_nao_executados", [])[:10]
+        payload = {
+            "total_planejado": estatisticas.get("total_planejado", 0),
+            "total_executado": estatisticas.get("total_executado", 0),
+            "total_nao_executado": estatisticas.get("total_nao_executado", 0),
+            "total_sem_geolocalizacao": estatisticas.get("total_sem_geolocalizacao", 0),
+            "percentual_execucao": estatisticas.get("percentual_execucao", 0),
+            "amostra_clientes_pendentes": amostra_pendentes,
+        }
+
+        prompt = f"""Você é um analista de operações logísticas. Com base nos dados agregados
+de uma auditoria de roteiro (entregas planejadas x executadas, cruzadas por
+proximidade GPS), escreva um parágrafo executivo curto (máximo 4 frases,
+sem markdown, em português) resumindo o desempenho da rota e destacando
+riscos ou pontos de atenção.
+
+DADOS AGREGADOS (JSON):
+{json.dumps(payload, ensure_ascii=False)}"""
+
+        modelos = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash"]
+        for modelo in modelos:
+            try:
+                response = self.client.models.generate_content(
+                    model=modelo,
+                    contents=prompt,
+                    config={"temperature": 0.2},
+                )
+                if response and hasattr(response, "text") and response.text:
+                    return response.text.strip()
+            except Exception as e:
+                print(f"[IA AUDITORIA FALHA {modelo}]: {e}")
+                continue
+
+        # Qualquer falha (rate limit, indisponibilidade, timeout) cai aqui:
+        # o chamador deve tratar isto como "sem resumo de IA disponível".
+        return None
+
 
 agente_ia = AgenteRefinamento()
