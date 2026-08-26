@@ -2,35 +2,43 @@ from __future__ import annotations
 
 import io
 from io import BytesIO
+import math
 import os
 import socket
+import sqlite3
 import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import uuid
 import webbrowser
 from typing import Any
 
-from flask import Flask, render_template, request, flash, session, send_file, redirect
+from dotenv import load_dotenv
+
+# 1. Carrega o .env antes de qualquer import de agente
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+env_path = os.path.join(BASE_DIR, ".env")
+load_dotenv(dotenv_path=env_path, override=True)
+
+# 2. Imports das bibliotecas e Flask
+import numpy as np
+import pandas as pd
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
+
 try:
     from docx import Document  # type: ignore[reportMissingImports]
 except ImportError:  # pragma: no cover
     Document = None
-import pandas as pd
-import numpy as np
-import unicodedata
-import sqlite3
-import math
 
+# 3. Módulos do sistema (agora seguros, com a chave do Gemini já carregada)
 from analisador_rastreio import RastreamentoAnalyzer
 from agente_refinamento import agente_ia
-import os
-import sys
-import sqlite3
-import pandas as pd
-from flask import Flask, render_template, request, redirect, url_for, flash
-
 
 
 def _template_folder() -> str:
