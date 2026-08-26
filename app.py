@@ -35,7 +35,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 # 2. Imports das bibliotecas e Flask
 import numpy as np
 import pandas as pd
-from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, flash, redirect, render_template, request, send_file, session
 
 try:
     from docx import Document  # type: ignore[reportMissingImports]
@@ -464,7 +464,7 @@ def _parse_poi_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
     for poi in pois:
         poi["id"] = _create_poi_id()
 
-    return pois
+    return pois # type: ignore
 
 
 def _cleanup_cached_file() -> None:
@@ -852,7 +852,6 @@ def index():
         raio_suspeita = 200.0
 
     action = request.form.get("action", "analyze")
-    columns: list[str] = []
     missing_rows: list[dict[str, object]] = []
     missing_columns: list[str] = []
     placas: list[str] = []
@@ -863,7 +862,6 @@ def index():
     uploaded_file_path = session.get("uploaded_file_path")
     file_name = session.get("uploaded_file_name", "")
     saved_pois = _get_saved_pois()
-    saved_pois_count = len(saved_pois)
     nomes_pois_registrados = {_normalize_column_name(str(p["nome"])) for p in saved_pois if p.get("nome")}
 
     if uploaded_file_path and not os.path.exists(uploaded_file_path):
@@ -875,12 +873,11 @@ def index():
     if request.method == "GET" and uploaded_file_path and os.path.exists(uploaded_file_path):
         try:
             df_full = carregar_arquivo(uploaded_file_path)
-            columns = list(df_full.columns)
             placa_col = _resolver_coluna(df_full, ["Placa", "placa", "plate"])
             placas = sorted(df_full[placa_col].dropna().astype(str).unique().tolist())
             if not placa_escolhida and placas:
                 placa_escolhida = placas[0]
-            
+
             df_placa = df_full[df_full[placa_col].astype(str) == placa_escolhida] if placa_escolhida else df_full
             missing_rows, missing_columns = _find_missing_poi_rows(df_placa, raio_suspeita, nomes_pois_registrados)
             paradas_suspeitas = _find_suspicious_stops(df_placa, raio_suspeita, nomes_pois_registrados)
@@ -894,8 +891,6 @@ def index():
         arquivo = request.files.get("arquivo")
         arquivo_pois = request.files.get("arquivo_pois")
         pois_text = request.form.get("pois", "")
-        saved_pois = _get_saved_pois()
-        saved_pois_count = len(saved_pois)
 
         action = request.form.get("action") or request.form.get("submit") or ""
 
@@ -946,7 +941,6 @@ def index():
         # 1. Carrega o arquivo UMA ÚNICA VEZ em memória
         try:
             df_full = carregar_arquivo(uploaded_file_path)
-            columns = list(df_full.columns)
             placa_col = _resolver_coluna(df_full, ["Placa", "placa", "plate"])
             placas = sorted(df_full[placa_col].dropna().astype(str).unique().tolist())
             if not placa_escolhida and placas:

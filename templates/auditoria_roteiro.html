@@ -124,6 +124,8 @@
   .flash-warning { background: var(--warn-soft); color: var(--warn); border: 1px solid var(--warn); }
   .flash-danger { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger); }
   .flash-success { background: var(--success-soft); color: var(--success); border: 1px solid var(--success); }
+
+  .oculto { display: none; }
 </style>
 </head>
 <body>
@@ -166,7 +168,10 @@
         </select>
       {% endif %}
       <input type="text" name="placa_auditoria" id="inputPlacaTexto" placeholder="Ex: ABC1234"
-             value="{{ placa_escolhida }}" {% if placas_disponiveis %}style="display:none;"{% endif %}>
+             value="{{ placa_escolhida }}"
+             <input type="text" name="placa_auditoria" id="inputPlacaTexto" placeholder="Ex: ABC1234"
+       value="{{ placa_escolhida }}"
+       {% if placas_disponiveis %}style="display:none;"{% endif %}>
     </div>
 
     <div class="form-group">
@@ -273,41 +278,58 @@
     {% endif %}
   </div>
 
+</main>
 
 <script>
   function atualizarEstadoBotao() {
-    const carregamento = document.getElementById('inputCarregamento').files.length > 0;
-    const rastreio = document.getElementById('inputRastreio').files.length > 0;
+    const inputCarreg = document.getElementById('inputCarregamento');
+    const inputRast = document.getElementById('inputRastreio');
+    
+    const carregamento = inputCarreg && inputCarreg.files ? inputCarreg.files.length > 0 : false;
+    const rastreio = inputRast && inputRast.files ? inputRast.files.length > 0 : false;
 
     const selectPlaca = document.getElementById('inputPlacaSelect');
     const textoPlaca = document.getElementById('inputPlacaTexto');
-    const placa = (selectPlaca && selectPlaca.style.display !== 'none' ? selectPlaca.value : textoPlaca.value).trim();
+    
+    let placa = '';
+    if (selectPlaca && selectPlaca.style.display !== 'none' && selectPlaca.value) {
+      placa = selectPlaca.value;
+    } else if (textoPlaca && textoPlaca.value) {
+      placa = textoPlaca.value;
+    }
+    placa = placa.trim();
 
-    const tolerancia = document.getElementById('inputTolerancia').value;
+    const inputTol = document.getElementById('inputTolerancia');
+    const tolerancia = inputTol ? inputTol.value : '';
 
-    const jaTemArquivoCarregamento = {{ 'true' if file_name_carregamento else 'false' }};
-    const jaTemArquivoRastreio = {{ 'true' if file_name_rastreio else 'false' }};
+    // Lê os estados salvos direto do backend via atributos do formulário ou variáveis globais seguras
+    const formEl = document.getElementById('formAuditoria');
+    const jaTemCarregamento = formEl && formEl.dataset.hasCarregamento === 'true';
+    const jaTemRastreio = formEl && formEl.dataset.hasRastreio === 'true';
 
-    const temCarregamento = carregamento || jaTemArquivoCarregamento;
-    const temRastreio = rastreio || jaTemArquivoRastreio;
+    const temCarregamento = carregamento || jaTemCarregamento;
+    const temRastreio = rastreio || jaTemRastreio;
 
     const habilitado = temCarregamento && temRastreio && placa.length > 0 && tolerancia && Number(tolerancia) > 0;
-    document.getElementById('btnExecutarAuditoria').disabled = !habilitado;
+    
+    const btnExec = document.getElementById('btnExecutarAuditoria');
+    if (btnExec) {
+      btnExec.disabled = !habilitado;
+    }
   }
 
-  document.getElementById('inputCarregamento').addEventListener('change', atualizarEstadoBotao);
-  document.getElementById('inputRastreio').addEventListener('change', atualizarEstadoBotao);
-  document.getElementById('inputTolerancia').addEventListener('input', atualizarEstadoBotao);
+  // Adiciona os event listeners com total segurança contra elementos nulos
+  ['inputCarregamento', 'inputRastreio', 'inputTolerancia', 'inputPlacaSelect', 'inputPlacaTexto'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', atualizarEstadoBotao);
+      el.addEventListener('change', atualizarEstadoBotao);
+    }
+  });
 
-  const selectPlacaEl = document.getElementById('inputPlacaSelect');
-  const textoPlacaEl = document.getElementById('inputPlacaTexto');
-  if (selectPlacaEl) selectPlacaEl.addEventListener('change', atualizarEstadoBotao);
-  textoPlacaEl.addEventListener('input', atualizarEstadoBotao);
-
+  // Executa na carga inicial
   atualizarEstadoBotao();
 </script>
 
 </body>
 </html>
-
-</main>
