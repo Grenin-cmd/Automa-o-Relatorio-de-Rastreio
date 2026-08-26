@@ -25,7 +25,18 @@ import math
 
 from analisador_rastreio import RastreamentoAnalyzer
 from agente_refinamento import agente_ia
+import os
+import sys
 
+# Garante que o banco e arquivos sejam gravados na pasta real do .exe
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DB_PATH = os.path.join(BASE_DIR, "poi_store.db")
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def _template_folder() -> str:
     if getattr(sys, "frozen", False):

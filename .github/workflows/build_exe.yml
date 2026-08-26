@@ -23,7 +23,7 @@ jobs:
 
       - name: Gerar Executavel Windows (.exe)
         run: |
-          pyinstaller --noconfirm --onedir --add-data "templates;templates" --add-data "poi_store.db;." --collect-all google.genai --collect-all dotenv --hidden-import=dotenv --name "Automacao_Relatorio_Rastreio" app.py
+          pyinstaller --noconfirm --onedir --add-data "templates;templates" --collect-all google.genai --collect-all dotenv --hidden-import=dotenv --hidden-import=pandas --hidden-import=openpyxl --name "Automacao_Relatorio_Rastreio" app.py
 
       - name: Disponibilizar arquivo para Download
         uses: actions/upload-artifact@v4
