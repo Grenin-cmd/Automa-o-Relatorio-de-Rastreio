@@ -15,6 +15,12 @@ import uuid
 import webbrowser
 from typing import Any
 
+# Lock para proteger o cache em memória de POIs/regras contra condições de corrida
+# quando o Flask atende requisições concorrentes (threaded=True).
+_CACHE_LOCK = threading.Lock()
+_POIS_CACHE: list[dict[str, object]] | None = None
+_REGRAS_CACHE: list[dict[str, Any]] | None = None
+
 from dotenv import load_dotenv
 
 # 1. Carrega o .env antes de qualquer import de agente
@@ -60,6 +66,10 @@ def _get_db_connection():
     db_path = os.path.join(_persistent_data_dir(), "poi_store.db")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
+    # WAL reduz bloqueios de escrita/leitura concorrentes e acelera commits;
+    # synchronous=NORMAL é seguro em modo WAL e evita fsyncs custosos a cada commit.
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
     return conn
 
 
@@ -110,27 +120,48 @@ _init_poi_db()
 
 
 def _get_regras_ativas() -> list[dict[str, Any]]:
+    """Retorna as regras ativas, usando um cache em memória para evitar reabrir o
+    SQLite em toda requisição (a rota `/` e o context_processor chamam isto com
+    frequência). O cache é invalidado sempre que uma regra é criada/excluída."""
+    global _REGRAS_CACHE
+    with _CACHE_LOCK:
+        if _REGRAS_CACHE is not None:
+            return list(_REGRAS_CACHE)
+
     conn = _get_db_connection()
     try:
         rows = conn.execute(
             "SELECT * FROM regras_refinamento WHERE ativa = 1 ORDER BY criada_em DESC"
         ).fetchall()
-        return [dict(row) for row in rows]
+        regras = [dict(row) for row in rows]
     finally:
         conn.close()
+
+    with _CACHE_LOCK:
+        _REGRAS_CACHE = regras
+    return list(regras)
+
+
+def _invalidar_cache_regras() -> None:
+    global _REGRAS_CACHE
+    with _CACHE_LOCK:
+        _REGRAS_CACHE = None
+
+
+def _invalidar_cache_pois() -> None:
+    global _POIS_CACHE
+    with _CACHE_LOCK:
+        _POIS_CACHE = None
 
 
 @app.context_processor
 def inject_globais():
-    conn = _get_db_connection()
-    pois = []
+    # Reaproveita o cache em memória de POIs (já povoado por _get_saved_pois) em vez
+    # de disparar uma segunda consulta ao SQLite em toda renderização de template.
     try:
-        cur = conn.execute("SELECT id, nome, raio_metros, latitude, longitude FROM pois ORDER BY nome ASC")
-        pois = [dict(row) for row in cur.fetchall()]
+        pois = _get_saved_pois()
     except Exception:
-        pass
-    finally:
-        conn.close()
+        pois = []
     return dict(regras_salvas=_get_regras_ativas(), pois_salvos=pois)
 
 
@@ -236,6 +267,7 @@ def _adicionar_regra(descricao: str, categoria: str = "GERAL", poi_id: str | Non
         return regra_id
     finally:
         conn.close()
+        _invalidar_cache_regras()
 
 
 @app.route("/excluir_regras", methods=["POST"])
@@ -255,6 +287,7 @@ def excluir_regras():
         flash(f"Erro ao excluir regras: {e}", "danger")
     finally:
         conn.close()
+        _invalidar_cache_regras()
     return redirect("/")
 
 
@@ -275,6 +308,7 @@ def excluir_pois():
         flash(f"Erro ao excluir POIs: {e}", "danger")
     finally:
         conn.close()
+        _invalidar_cache_pois()
     return redirect("/")
 
 
@@ -283,12 +317,24 @@ def _create_poi_id() -> str:
 
 
 def _get_saved_pois() -> list[dict[str, object]]:
+    """Retorna os POIs salvos, usando um cache em memória. Com uma base de 16k+
+    POIs, evitar reabrir o SQLite e re-serializar as linhas em toda requisição
+    (rota `/` GET/POST + context_processor) é o ganho de performance mais direto."""
+    global _POIS_CACHE
+    with _CACHE_LOCK:
+        if _POIS_CACHE is not None:
+            return list(_POIS_CACHE)
+
     conn = _get_db_connection()
     try:
         rows = conn.execute("SELECT * FROM pois ORDER BY nome COLLATE NOCASE").fetchall()
-        return [dict(row) for row in rows]
+        pois = [dict(row) for row in rows]
     finally:
         conn.close()
+
+    with _CACHE_LOCK:
+        _POIS_CACHE = pois
+    return list(pois)
 
 
 def _save_saved_pois(pois: list[dict[str, object]]) -> None:
@@ -305,52 +351,117 @@ def _save_saved_pois(pois: list[dict[str, object]]) -> None:
         conn.commit()
     finally:
         conn.close()
+    _invalidar_cache_pois()
+
+
+def _converter_coordenada(val: Any) -> float | None:
+    """Converte coordenadas em formato brasileiro (ex: -19.839.907 ou -19,839907)
+    para float, removendo pontos extras de milhar antes da conversão."""
+    if val is None or pd.isna(val):
+        return None
+    texto = str(val).strip().replace("\xa0", "").replace("\u202f", "").replace(" ", "")
+    if not texto:
+        return None
+    if texto.count(".") > 1:
+        # Múltiplos pontos: mantém o primeiro como separador decimal e remove os demais.
+        partes = texto.split(".")
+        texto = partes[0] + "." + "".join(partes[1:])
+    elif "," in texto and "." in texto:
+        texto = texto.replace(".", "").replace(",", ".")
+    elif "," in texto:
+        texto = texto.replace(",", ".")
+    try:
+        return float(texto)
+    except ValueError:
+        return None
+
+
+def _converter_numero_opcional(val: Any, cast: type, default: float | int) -> Any:
+    """Converte um valor numérico opcional (raio, tempo, velocidade) usando a mesma
+    lógica de normalização de pontos/vírgulas. Retorna o default se vazio ou inválido."""
+    if val is None or pd.isna(val):
+        return default
+    convertido = _converter_coordenada(val)
+    if convertido is None:
+        return default
+    try:
+        return cast(convertido)
+    except (ValueError, TypeError):
+        return default
 
 
 def _parse_poi_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
     if df.empty:
         raise ValueError("Arquivo de POIs vazio.")
 
-    working = df.copy()
-    working.columns = [str(col).strip() for col in working.columns]
+    # Limpa os nomes das colunas (remove espaços, acentos, caixa e caracteres especiais)
+    # para tornar a detecção de colunas resiliente a variações da planilha (ex: " Latitude").
+    working = _normalize_columns(df.copy())
 
-    col_nome = next((c for c in working.columns if any(k in c.lower() for k in ["local", "nome", "descricao", "poi", "localizacao"])), None)
-    col_lat = next((c for c in working.columns if any(k in c.lower() for k in ["lat", "latitude", "latidude"])), None)
-    col_lon = next((c for c in working.columns if any(k in c.lower() for k in ["lon", "lng", "longitude", "longitutde", "longitud"])), None)
+    def _find_col(keywords: list[str]) -> str | None:
+        return next((c for c in working.columns if any(k in c for k in keywords)), None)
+
+    col_nome = _find_col(["local", "nome", "descricao", "poi", "localizacao"])
+    col_lat = _find_col(["latitude", "lat"])
+    col_lon = _find_col(["longitude", "longitud", "lon", "lng"])
+    col_tipo = _find_col(["tipo", "categoria"])
+    col_raio = _find_col(["raio"])
+    col_tempo = _find_col(["tempo_parado", "tempo"])
+    col_velocidade = _find_col(["velocidade_maxima", "velocidade"])
+    col_cidade = _find_col(["cidade"])
+    col_estado = _find_col(["estado", "uf"])
+    col_rodovia = _find_col(["rodovia"])
 
     if not col_lat or not col_lon:
-        raise ValueError(f"Colunas de Latitude e Longitude não encontradas. Colunas lidas: {list(working.columns)}")
+        raise ValueError(f"Colunas de Latitude e Longitude não encontradas. Colunas lidas: {list(df.columns)}")
 
-    def _converter_coordenada(val: Any) -> float | None:
-        if val is None or pd.isna(val):
-            return None
-        texto = str(val).strip().replace(" ", "")
-        if texto.count(".") > 1:
-            partes = texto.split(".")
-            texto = partes[0] + "." + "".join(partes[1:])
-        elif "," in texto and "." in texto:
-            texto = texto.replace(".", "").replace(",", ".")
-        elif "," in texto:
-            texto = texto.replace(",", ".")
-        try:
-            return float(texto)
-        except ValueError:
-            return None
+    n = len(working)
 
-    pois: list[dict[str, Any]] = []
-    for _, row in working.iterrows():
-        nome = str(row[col_nome]).strip() if col_nome and pd.notna(row[col_nome]) else "POI sem nome"
-        lat = _converter_coordenada(row[col_lat])
-        lon = _converter_coordenada(row[col_lon])
+    def _text_col(col: str | None, default: str) -> pd.Series:
+        if not col:
+            return pd.Series([default] * n, index=working.index)
+        serie = working[col].astype(str).str.strip()
+        return serie.where(working[col].notna() & (serie != ""), default)
 
-        if lat is not None and lon is not None:
-            pois.append({
-                "nome": nome,
-                "latitude": lat,
-                "longitude": lon,
-                "raio": 200,
-                "tipo": "Geral"
-            })
+    def _num_col(col: str | None, cast: type, default: float | int) -> pd.Series:
+        if not col:
+            return pd.Series([default] * n, index=working.index)
+        # .map() opera célula a célula (mesma lógica de _converter_numero_opcional),
+        # mas evita a reconstrução de uma Series por linha que .iterrows() faz,
+        # sendo significativamente mais rápido em planilhas com milhares de POIs.
+        return working[col].map(lambda v: _converter_numero_opcional(v, cast, default))
+
+    nomes = _text_col(col_nome, "POI sem nome")
+    tipos = _text_col(col_tipo, "Geral")
+    cidades = _text_col(col_cidade, "")
+    estados = _text_col(col_estado, "")
+    rodovias = _text_col(col_rodovia, "")
+
+    latitudes = working[col_lat].map(_converter_coordenada)
+    longitudes = working[col_lon].map(_converter_coordenada)
+    raios = _num_col(col_raio, float, 200.0)
+    tempos = _num_col(col_tempo, int, 120)
+    velocidades = _num_col(col_velocidade, float, 10.0)
+
+    resultado = pd.DataFrame({
+        "nome": nomes,
+        "tipo": tipos,
+        "latitude": latitudes,
+        "longitude": longitudes,
+        "cidade": cidades,
+        "estado": estados,
+        "rodovia": rodovias,
+        "raio_metros": raios,
+        "tempo_parado_seg": tempos,
+        "velocidade_maxima_kmh": velocidades,
+    })
+
+    # Descarta linhas sem coordenadas válidas (mesmo critério do loop original).
+    resultado = resultado.dropna(subset=["latitude", "longitude"])
+
+    pois = resultado.to_dict("records")
+    for poi in pois:
+        poi["id"] = _create_poi_id()
 
     return pois
 
@@ -538,9 +649,14 @@ def _find_suspicious_stops(
         return []
 
     resultados: list[dict[str, object]] = []
-    placas = sorted(df[placa_col].dropna().astype(str).unique().tolist())
-    for placa in placas:
-        subset = df[df[placa_col].astype(str) == placa]
+    # Calcula a coluna de placa como string uma única vez e usa groupby para obter
+    # os subsets por placa, evitando refazer `df[placa_col].astype(str) == placa`
+    # (custo O(n_placas * n_linhas)) a cada iteração — importante em planilhas
+    # grandes com muitas placas distintas.
+    placas_str = df[placa_col].astype(str)
+    for placa, subset in df.groupby(placas_str, sort=True):
+        if not placa or placa == "nan":
+            continue
         rows, _ = _find_missing_poi_rows(subset, raio_tolerancia_m, nomes_pois_registrados, pois_lista)
         for row in rows:
             resultados.append(
@@ -594,15 +710,17 @@ def _gerar_resumo_geral_placas(df: pd.DataFrame, pois: list[dict[str, object]], 
     except ValueError:
         return "Não foi possível detectar a coluna de placa para gerar o resumo geral."
 
-    placas = sorted(working[placa_col].dropna().astype(str).unique().tolist())
-    if not placas:
+    placas_str = working[placa_col].astype(str)
+    if placas_str.dropna().empty:
         return "Nenhuma placa encontrada no arquivo."
 
     analyzer = RastreamentoAnalyzer(pois=pois, raio_tolerancia_m=raio_tolerancia_m)
     lines: list[str] = []
-    for placa in placas:
-        subset = df[df[placa_col].astype(str) == placa]
-        if subset.empty:
+    # groupby computa todos os subsets de placa em uma única passada vetorizada,
+    # em vez de refazer o filtro booleano `df[placa_col].astype(str) == placa`
+    # para cada placa (O(n_placas * n_linhas) no código anterior).
+    for placa, subset in working.groupby(placas_str, sort=True):
+        if not placa or placa == "nan" or subset.empty:
             continue
 
         report = analyzer.gerar_relatorio(subset)

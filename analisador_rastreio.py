@@ -8,6 +8,7 @@ import math
 import os
 import re
 import unicodedata
+import numpy as np
 import pandas as pd
 
 
@@ -102,6 +103,25 @@ class RastreamentoAnalyzer:
             if chave:
                 self._pois_por_chave.setdefault(chave, []).append(poi)
 
+        # Pré-computa arrays numpy dos POIs válidos (com coordenadas) uma única vez.
+        # Isso permite vetorizar a busca por proximidade via haversine em numpy em vez
+        # de um loop Python por POI a cada chamada — crítico quando a base tem
+        # milhares de POIs (ex: 16.000+), pois _buscar_poi_por_coordenada pode ser
+        # chamada uma vez por linha da planilha de rastreamento.
+        self._pois_validos: List[PontoInteresse] = [
+            poi for poi in self.pois if poi.latitude and poi.longitude
+        ]
+        if self._pois_validos:
+            self._pois_lat_rad = np.radians(np.array([p.latitude for p in self._pois_validos]))
+            self._pois_lon_rad = np.radians(np.array([p.longitude for p in self._pois_validos]))
+            self._pois_limite_m = np.array(
+                [max(p.raio_metros, self.raio_tolerancia_m) for p in self._pois_validos]
+            )
+        else:
+            self._pois_lat_rad = np.array([])
+            self._pois_lon_rad = np.array([])
+            self._pois_limite_m = np.array([])
+
     def _distancia_metros(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         R = 6371000.0
         phi1 = math.radians(lat1)
@@ -115,16 +135,30 @@ class RastreamentoAnalyzer:
         return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     def _buscar_poi_por_coordenada(self, lat: float, lon: float) -> tuple[PontoInteresse | None, float]:
-        melhor_poi = None
-        menor_dist = float("inf")
-        for poi in self.pois:
-            if poi.latitude and poi.longitude:
-                dist = self._distancia_metros(lat, lon, poi.latitude, poi.longitude)
-                limite = max(poi.raio_metros, self.raio_tolerancia_m)
-                if dist <= limite and dist < menor_dist:
-                    menor_dist = dist
-                    melhor_poi = poi
-        return melhor_poi, menor_dist
+        if not self._pois_validos:
+            return None, float("inf")
+
+        # Haversine vetorizado (numpy) contra todos os POIs de uma vez, em vez de um
+        # loop Python + trigonometria por POI. Reduz drasticamente o custo quando há
+        # milhares de POIs cadastrados.
+        R = 6371000.0
+        lat_rad = math.radians(lat)
+        lon_rad = math.radians(lon)
+        dphi = self._pois_lat_rad - lat_rad
+        dlambda = self._pois_lon_rad - lon_rad
+        a = (
+            np.sin(dphi / 2.0) ** 2
+            + math.cos(lat_rad) * np.cos(self._pois_lat_rad) * np.sin(dlambda / 2.0) ** 2
+        )
+        distancias = 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+
+        dentro_do_raio = distancias <= self._pois_limite_m
+        if not np.any(dentro_do_raio):
+            return None, float("inf")
+
+        distancias_validas = np.where(dentro_do_raio, distancias, np.inf)
+        idx_melhor = int(np.argmin(distancias_validas))
+        return self._pois_validos[idx_melhor], float(distancias_validas[idx_melhor])
 
     def _normalize_column_name(self, name: str) -> str:
         name = str(name).strip().lower()
@@ -589,17 +623,43 @@ class RastreamentoAnalyzer:
         if df.empty:
             return []
 
+        # Pré-extrai as colunas relevantes como arrays numpy/python uma única vez.
+        # Isso evita reconstruir objetos Row do pandas (.iterrows()) a cada
+        # combinação (poi, linha) — o custo original era O(n_pois * n_linhas) com
+        # overhead de iterrows(); agora o cálculo de distância por POI é vetorizado
+        # via numpy e a máquina de estados itera sobre arrays simples.
+        lat_arr = pd.to_numeric(df[latitude_col], errors="coerce").to_numpy(dtype=float)
+        lon_arr = pd.to_numeric(df[longitude_col], errors="coerce").to_numpy(dtype=float)
+        velocidade_arr = df[velocidade_col].to_numpy(dtype=float)
+        timestamps = df[timestamp_col].tolist()
+
+        R = 6371000.0
+        lat_rad_arr = np.radians(lat_arr)
+        lon_rad_arr = np.radians(lon_arr)
+
         for poi in self.pois:
             inside = False
             entry_detected = False
             entry_start_time: datetime | None = None
             entry_end_time: datetime | None = None
 
-            for _, row in df.iterrows():
-                dist = self._distancia_metros(poi.latitude, poi.longitude, row[latitude_col], row[longitude_col])
-                velocidade = float(row[velocidade_col])
-                current_time = row[timestamp_col]
-                is_inside = dist <= max(poi.raio_metros, self.raio_tolerancia_m)
+            # Distância haversine vetorizada do POI contra todas as linhas de uma vez.
+            poi_lat_rad = math.radians(poi.latitude)
+            poi_lon_rad = math.radians(poi.longitude)
+            dphi = lat_rad_arr - poi_lat_rad
+            dlambda = lon_rad_arr - poi_lon_rad
+            a = (
+                np.sin(dphi / 2.0) ** 2
+                + math.cos(poi_lat_rad) * np.cos(lat_rad_arr) * np.sin(dlambda / 2.0) ** 2
+            )
+            dist_arr = 2 * R * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+            limite = max(poi.raio_metros, self.raio_tolerancia_m)
+            is_inside_arr = dist_arr <= limite
+
+            for idx in range(len(timestamps)):
+                velocidade = float(velocidade_arr[idx])
+                current_time = timestamps[idx]
+                is_inside = bool(is_inside_arr[idx])
 
                 if is_inside and velocidade <= poi.velocidade_maxima_kmh:
                     if not inside:
