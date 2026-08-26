@@ -27,16 +27,11 @@ from analisador_rastreio import RastreamentoAnalyzer
 from agente_refinamento import agente_ia
 import os
 import sys
+import sqlite3
+import pandas as pd
+from flask import Flask, render_template, request, redirect, url_for, flash
 
-# Garante que o banco e arquivos sejam gravados na pasta real do .exe
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DB_PATH = os.path.join(BASE_DIR, "poi_store.db")
-UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def _template_folder() -> str:
     if getattr(sys, "frozen", False):
@@ -824,11 +819,13 @@ def index():
     if request.method == "POST":
         arquivo = request.files.get("arquivo")
         arquivo_pois = request.files.get("arquivo_pois")
-        pois_text = request.form.get("pois", pois_text)
+        pois_text = request.form.get("pois", "")
         saved_pois = _get_saved_pois()
         saved_pois_count = len(saved_pois)
 
-        if action == "import_pois":
+        action = request.form.get("action") or request.form.get("submit") or ""
+
+        if action == "import_pois" or "import_pois" in request.form or (arquivo_pois and arquivo_pois.filename):
             if not arquivo_pois or not arquivo_pois.filename:
                 flash("Selecione um arquivo CSV ou Excel de POIs para importar.", "warning")
             else:
@@ -838,7 +835,7 @@ def index():
                     _save_saved_pois(imported_pois)
                     flash(f"{len(imported_pois)} POI(s) importado(s) com sucesso.", "success")
                 except Exception as error:
-                    flash(str(error), "danger")
+                    flash(f"Erro ao processar POIs: {error}", "danger")
             return redirect("/")
 
         if arquivo and arquivo.filename:
