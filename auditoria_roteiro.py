@@ -208,10 +208,25 @@ _ALIASES_LON = ["longitude", "lon", "lng"]
 
 
 def extrair_coordenadas_rastreio(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
-    """Extrai os arrays numpy de latitude/longitude do log de rastreio da
-    placa. Aceita tanto o schema "bruto" quanto variações de nome de coluna
-    já usadas no restante do sistema."""
+    """Extrai os arrays numpy de latitude/longitude do log de rastreio da placa.
+    Agora com inteligência para separar colunas combinadas 'Latitude / Longitude'."""
     working = normalize_columns(df.copy())
+    
+    # 1. Tenta encontrar a coluna combinada do novo sistema (ex: "Latitude / Longitude")
+    col_lat_lon = _resolver_coluna_flex(working, ["latitude_longitude", "lat_lon"])
+    if col_lat_lon:
+        # Separa a string na barra ("/") em duas colunas reais
+        coords = working[col_lat_lon].astype(str).str.split("/", expand=True)
+        if coords.shape[1] >= 2:
+            lat_series = coords[0].str.strip().str.replace(",", ".", regex=False)
+            lon_series = coords[1].str.strip().str.replace(",", ".", regex=False)
+            
+            lat = pd.to_numeric(lat_series, errors="coerce").to_numpy(dtype=float)
+            lon = pd.to_numeric(lon_series, errors="coerce").to_numpy(dtype=float)
+            mask_validos = ~(np.isnan(lat) | np.isnan(lon))
+            return lat[mask_validos], lon[mask_validos]
+
+    # 2. Fallback: Se não achar, tenta o fluxo normal (colunas separadas)
     col_lat = _resolver_coluna_flex(working, _ALIASES_LAT)
     col_lon = _resolver_coluna_flex(working, _ALIASES_LON)
 
@@ -226,7 +241,7 @@ def extrair_coordenadas_rastreio(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarr
     ).to_numpy(dtype=float)
 
     mask_validos = ~(np.isnan(lat) | np.isnan(lon))
-    return lat[mask_validos], lon[mask_validos]
+    return lat[mask_validos], lon[mask_validos] 
 
 
 def cruzar_entregas_com_rastreio(
@@ -283,15 +298,18 @@ _ALIASES_PLACA_RASTREIO = ["placa", "veiculo", "plate"]
 
 
 def filtrar_rastreio_por_placa(df: pd.DataFrame, placa: str) -> pd.DataFrame:
-    """Filtra o log de rastreio pela placa selecionada, se houver coluna de
-    placa disponível; caso contrário assume que o arquivo já é específico
-    dessa placa e retorna sem alterações."""
+    """Filtra o log de rastreio pela placa selecionada.
+    Blindado contra diferenças de digitação (ignora traços e espaços)."""
     working = normalize_columns(df.copy())
     col_placa = _resolver_coluna_flex(working, _ALIASES_PLACA_RASTREIO)
     if not col_placa or not placa:
         return df
-    placa_norm = str(placa).strip().upper()
-    mask = working[col_placa].astype(str).str.strip().str.upper() == placa_norm
+        
+    # Remove traços da placa digitada
+    placa_norm = str(placa).replace("-", "").strip().upper()
+    
+    # Remove traços da placa que está no arquivo antes de comparar
+    mask = working[col_placa].astype(str).str.replace("-", "", regex=False).str.strip().str.upper() == placa_norm
     filtrado = df[mask.to_numpy()]
     return filtrado if not filtrado.empty else df
 

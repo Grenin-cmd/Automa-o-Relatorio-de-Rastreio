@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from telemetry import track_event  # <-- Adicione aqui, na linha 3!
 import hashlib
 import json
 import os
@@ -8,15 +9,17 @@ import threading
 from typing import Any
 from dotenv import load_dotenv
 
-# Timeout (ms) por tentativa de chamada ao Gemini. Sem isso, um modelo com alta
-# demanda pode deixar a requisição HTTP do Flask pendurada por minutos (observado
-# em testes: 503 retornado apenas após ~200s) antes de tentar o próximo fallback.
-_GEMINI_TIMEOUT_MS = int(os.getenv("GEMINI_TIMEOUT_MS", "15000"))
+# Verifica se a biblioteca universal da OpenAI está instalada
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
-# Cache simples em memória do resultado do refinamento, para evitar chamar a IA
-# novamente quando o mesmo relatório bruto + o mesmo conjunto de regras já foram
-# processados (ex: usuário atualiza a página ou repete a mesma ação). Isso evita
-# bloquear o ciclo de resposta HTTP com uma chamada de rede redundante.
+# Timeout (ms) configurável
+_TIMEOUT_MS = int(os.getenv("GEMINI_TIMEOUT_MS", "15000"))
+_TIMEOUT_SEC = _TIMEOUT_MS / 1000.0
+
+# Cache simples em memória
 _REFINAMENTO_CACHE: dict[str, str] = {}
 _REFINAMENTO_CACHE_LOCK = threading.Lock()
 _REFINAMENTO_CACHE_MAX_ITENS = 64
@@ -39,20 +42,8 @@ def _carregar_env() -> None:
 
 _carregar_env()
 
-try:
-    from google import genai
-    from google.genai import types as genai_types
-except ImportError:
-    genai = None
-    genai_types = None
-
-
 def _extrair_texto_regra(regra: Any) -> str:
-    """Extrai a string de descrição de uma regra, que pode chegar como:
-    - str simples: "Sempre citar a placa"
-    - str contendo JSON: '{"descricao": "Sempre citar a placa"}'
-    - dict: {"descricao": "..."} (ou chaves alternativas "regra"/"texto")
-    """
+    """Extrai a string de descrição de uma regra."""
     if isinstance(regra, dict):
         valor = regra.get("descricao") or regra.get("regra") or regra.get("texto")
         if valor:
@@ -76,36 +67,95 @@ def _extrair_texto_regra(regra: Any) -> str:
 
 
 class AgenteRefinamento:
-    def __init__(self, api_key: str | None = None) -> None:
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.client = None
-        self._conectar()
+    def __init__(self) -> None:
+        _carregar_env()
+        # Lê as chaves do seu arquivo .env
+        self.google_key = os.getenv("GEMINI_API_KEY")
+        self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-    def _conectar(self) -> None:
-        if not self.api_key:
-            _carregar_env()
-            self.api_key = os.getenv("GEMINI_API_KEY")
+        if not OpenAI:
+            print("[IA STATUS] AVISO: Biblioteca 'openai' não encontrada. Instale com: pip install openai")
 
-        if genai and self.api_key and not self.client:
+    def _chamar_ia_com_fallback(self, prompt: str, system_instruction: str | None = None, temperatura: float = 0.2) -> str | None:
+        """
+        Executa a cascata de IA: OpenRouter -> Google API -> Ollama Local.
+        Garante que o sistema sempre retornará uma resposta se houver alguma opção disponível.
+        """
+        if not OpenAI:
+            return None
+
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": prompt})
+
+        # ---------------------------------------------------------
+        # TENTATIVA 1: OpenRouter (Modelos Gratuitos)
+        # ---------------------------------------------------------
+        if self.openrouter_key:
             try:
-                # Define um timeout por requisição HTTP ao Gemini para que um modelo
-                # "hanging" (alta demanda) não bloqueie o ciclo de resposta do Flask
-                # por minutos; a chamada falha rápido e o fallback tenta o próximo modelo.
-                http_options = genai_types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS) if genai_types else None
-                self.client = genai.Client(api_key=self.api_key, http_options=http_options)
-                print("[IA STATUS] Google Gemini conectado com sucesso.")
+                print("--> [IA] Tentando OpenRouter (gemini-2.0-flash-exp:free)...")
+                client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=str(self.openrouter_key))
+                resposta = client.chat.completions.create(
+                    model="google/gemini-2.0-flash-exp:free",
+                    messages=messages,
+                    temperature=temperatura,
+                    timeout=_TIMEOUT_SEC
+                )
+                if resposta.choices:
+                    print("--> [IA SUCESSO] Resposta gerada via OpenRouter!")
+                    return (resposta.choices[0].message.content or "").strip()
             except Exception as e:
-                print(f"[IA STATUS] Erro ao instanciar Gemini: {e}")
+                print(f"[IA FALHA OpenRouter]: {e}")
 
+        # ---------------------------------------------------------
+       # ---------------------------------------------------------
+        # TENTATIVA 2: Google Gemini (API Direta compatível com OpenAI)
+        # ---------------------------------------------------------
+        if self.google_key:
+            try:
+                print("--> [IA] Tentando Google Gemini Direto (gemini-1.5-flash)...")
+                client = OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=str(self.google_key))
+                resposta = client.chat.completions.create(
+                    model="gemini-1.5-flash",
+                    messages=messages,
+                    temperature=temperatura,
+                    timeout=_TIMEOUT_SEC
+                )
+                if resposta.choices:
+                    print("--> [IA SUCESSO] Resposta gerada via Google Gemini!")
+                    track_event("geracao_ia_sucesso", {"provedor": "google_gemini"}) # ADICIONE ESTA LINHA
+                    return (resposta.choices[0].message.content or "").strip()
+            except Exception as e:
+                print(f"[IA FALHA Google Gemini]: {e}")
+
+        # ---------------------------------------------------------
+        # TENTATIVA 3: Ollama Local (Totalmente Offline e Sem Limites)
+        # ---------------------------------------------------------
+        try:
+            print("--> [IA] Tentando Ollama Local (llama3.2)...")
+            client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+            resposta = client.chat.completions.create(
+                model="llama3.2",
+                messages=messages,
+                temperature=temperatura,
+                timeout=max(20.0, _TIMEOUT_SEC) 
+            )
+            if resposta.choices:
+                print("--> [IA SUCESSO] Resposta gerada offline via Ollama!")
+                return (resposta.choices[0].message.content or "").strip()
+        except Exception as e:
+            print(f"[IA FALHA Ollama Local]: Servidor não está rodando ou modelo não encontrado. ({e})")
+
+        # Se todas falharem, retorna None para ativar o Fallback Gracioso (Plano B) na interface
+        track_event("falha_cascata_ia_critica", {"motivo": "todas_tentativas_falharam"}) # ADICIONE ESTA LINHA
+        return None
     def refinar_relatorio(self, relatorio_bruto: str, regras: list[Any]) -> str:
+        """Aplica as regras de negócio no relatório bruto usando a cascata de IAs."""
         if not relatorio_bruto or relatorio_bruto.strip() in ["", "Nenhum evento detectado."]:
             return relatorio_bruto
 
-        if not self.client:
-            self._conectar()
-
-        if not self.client or not regras:
-            print(f"[IA AVISO] Refinamento ignorado: client={bool(self.client)}, regras={len(regras) if regras else 0}")
+        if not regras:
             return relatorio_bruto
 
         linhas_regras: list[str] = []
@@ -119,16 +169,14 @@ class AgenteRefinamento:
 
         regras_formatadas = "\n".join(linhas_regras)
 
-        # Evita chamar a IA de novo para o mesmo texto bruto + mesmo conjunto de
-        # regras (ex: recarregamento de página, nova aba com os mesmos dados).
-        cache_key = hashlib.sha256(
-            (relatorio_bruto + "||" + regras_formatadas).encode("utf-8")
-        ).hexdigest()
+        # Verifica cache
+        cache_key = hashlib.sha256((relatorio_bruto + "||" + regras_formatadas).encode("utf-8")).hexdigest()
         with _REFINAMENTO_CACHE_LOCK:
             cached = _REFINAMENTO_CACHE.get(cache_key)
         if cached is not None:
             print("--> [IA CACHE] Resultado reaproveitado do cache em memória.")
             return cached
+
         system_instruction = (
             "Você é um auditor e formatador de relatórios de rastreamento veicular. "
             "Sua única tarefa é reescrever o texto fornecido aplicando rigorosamente todas as regras de negócio listadas."
@@ -144,66 +192,28 @@ INSTRUÇÕES:
 - Aplique todas as regras acima com rigor.
 - Retorne apenas o texto final refinado e formatado."""
 
-        # Lista de modelos em ordem de preferência. A Google descontinua IDs de modelo
-        # com o tempo (ex: gemini-2.5-flash/pro e gemini-2.0-flash retornam 404 para
-        # contas novas). Priorizamos o modelo estável mais atual disponível na API e
-        # mantemos aliases "-latest" e nomes antigos como fallback para contas onde
-        # eles ainda funcionem.
-        modelos = [
-            "gemini-3.6-flash",
-            "gemini-flash-latest",
-            "gemini-pro-latest",
-            "gemini-2.5-flash",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-        ]
+        resultado_ia = self._chamar_ia_com_fallback(
+            prompt=prompt_conteudo, 
+            system_instruction=system_instruction, 
+            temperatura=0.1
+        )
 
-        for modelo in modelos:
-            try:
-                print(f"--> [IA] Tentando refinamento com {modelo}...")
-                response = self.client.models.generate_content(
-                    model=modelo,
-                    contents=prompt_conteudo,
-                    config={
-                        "system_instruction": system_instruction,
-                        "temperature": 0.1,
-                    },
-                )
-                if response and hasattr(response, "text") and response.text:
-                    print(f"--> [IA SUCESSO] Relatório refinado usando {modelo}!")
-                    resultado = response.text.strip()
-                    self._salvar_no_cache(cache_key, resultado)
-                    return resultado
-            except Exception as e:
-                print(f"[IA FALHA {modelo}]: {e}")
-                continue
+        if resultado_ia:
+            self._salvar_no_cache(cache_key, resultado_ia)
+            return resultado_ia
 
+        # Se todas as IAs falharam, devolve o texto original para o sistema não quebrar
         return relatorio_bruto
 
     @staticmethod
     def _salvar_no_cache(cache_key: str, resultado: str) -> None:
         with _REFINAMENTO_CACHE_LOCK:
             if len(_REFINAMENTO_CACHE) >= _REFINAMENTO_CACHE_MAX_ITENS:
-                # Remove a entrada mais antiga (FIFO simples) para não crescer
-                # indefinidamente a memória do processo.
                 _REFINAMENTO_CACHE.pop(next(iter(_REFINAMENTO_CACHE)))
             _REFINAMENTO_CACHE[cache_key] = resultado
 
     def gerar_resumo_auditoria(self, estatisticas: dict[str, Any]) -> str | None:
-        """Gera um parágrafo executivo curto para o módulo de Auditoria de
-        Roteiro, a partir de um payload agregado pequeno (apenas contadores e
-        uma amostra de clientes não visitados — nunca a planilha inteira).
-
-        Retorna None (Plano B / fallback gracioso) sempre que a IA não está
-        disponível, atinge rate limit ou falha por qualquer motivo. O
-        chamador (rota Flask) deve continuar exibindo os dados brutos da
-        auditoria normalmente quando isto retornar None.
-        """
-        if not self.client:
-            self._conectar()
-        if not self.client:
-            return None
-
+        """Gera um parágrafo executivo para a Auditoria de Roteiro usando a cascata."""
         amostra_pendentes = estatisticas.get("clientes_nao_executados", [])[:10]
         payload = {
             "total_planejado": estatisticas.get("total_planejado", 0),
@@ -223,23 +233,8 @@ riscos ou pontos de atenção.
 DADOS AGREGADOS (JSON):
 {json.dumps(payload, ensure_ascii=False)}"""
 
-        modelos = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-2.5-flash"]
-        for modelo in modelos:
-            try:
-                response = self.client.models.generate_content(
-                    model=modelo,
-                    contents=prompt,
-                    config={"temperature": 0.2},
-                )
-                if response and hasattr(response, "text") and response.text:
-                    return response.text.strip()
-            except Exception as e:
-                print(f"[IA AUDITORIA FALHA {modelo}]: {e}")
-                continue
-
-        # Qualquer falha (rate limit, indisponibilidade, timeout) cai aqui:
-        # o chamador deve tratar isto como "sem resumo de IA disponível".
-        return None
+        # Como é um resumo criativo, usamos temperatura 0.2 sem instruction de sistema
+        return self._chamar_ia_com_fallback(prompt=prompt, temperatura=0.2)
 
 
 agente_ia = AgenteRefinamento()
