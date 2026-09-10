@@ -14,6 +14,10 @@ import unicodedata
 import uuid
 import webbrowser
 from typing import Any
+# ====== NOVO SISTEMA DE RASTREAMENTO (ADICIONE ISTO) ======
+from leitor_universal import ler_rastreamento
+from adaptador_compatibilidade import AdaptadorParaRastreamento
+# ========================================================
 
 # Lock para proteger o cache em memória de POIs/regras contra condições de corrida
 # quando o Flask atende requisições concorrentes (threaded=True).
@@ -44,7 +48,12 @@ except ImportError:  # pragma: no cover
 
 # 3. Módulos do sistema (agora seguros, com a chave do Gemini já carregada)
 from analisador_rastreio import RastreamentoAnalyzer
-from agente_refinamento import agente_ia
+try:
+    from agente_refinamento import agente_ia
+except (ImportError, Exception) as e:
+    print(f"[AVISO] Falha ao importar agente_ia: {e}")
+    agente_ia = None
+
 import auditoria_roteiro
 
 
@@ -536,7 +545,7 @@ def _find_missing_poi_rows(
     if parados.empty:
         return [], []
 
-    if pois_lista and lat_col and lon_col:
+    if pois_lista and lat_col and lon_col and not parados.empty:
         lats_p = pd.to_numeric(parados[lat_col].astype(str).str.replace(",", "."), errors="coerce").values
         lons_p = pd.to_numeric(parados[lon_col].astype(str).str.replace(",", "."), errors="coerce").values
 
@@ -736,8 +745,11 @@ def _gerar_resumo_geral_placas(df: pd.DataFrame, pois: list[dict[str, object]], 
         lines.append(f"{placa}: {report_body}")
 
     resumo_bruto = "\n\n".join(lines)
-    regras_ativas = _get_regras_ativas()
-    return agente_ia.refinar_relatorio(resumo_bruto, regras_ativas)
+    if agente_ia:
+        regras_ativas = _get_regras_ativas()
+        return agente_ia.refinar_relatorio(resumo_bruto, regras_ativas)
+    else:
+        return resumo_bruto
 
 
 def _create_word_bytes(summary: str) -> bytes:
@@ -984,12 +996,14 @@ def index():
         try:
             if action == "summary":
                 resumo_geral = _gerar_resumo_geral_placas(df_full, pois_ajustados, raio_tolerancia_m=raio_suspeita)
+                if agente_ia:
+                    resumo_geral = agente_ia.refinar_relatorio(resumo_geral, _get_regras_ativas())
                 session["word_summary"] = resumo_geral
             elif action == "timeline":
                 timeline_eventos = _gerar_timeline_viagem(df_full, placa_escolhida, pois_ajustados, limite_velocidade_kmh, raio_suspeita)
             else:
                 relatorio_bruto = analyzer.gerar_relatorio(df_placa)
-                report = agente_ia.refinar_relatorio(relatorio_bruto, regras_ativas)
+                report = agente_ia.refinar_relatorio(relatorio_bruto, regras_ativas) if agente_ia else relatorio_bruto
 
             paradas_suspeitas = _find_suspicious_stops(df_placa, raio_suspeita, nomes_pois_registrados)
         except Exception as error:
@@ -1119,8 +1133,12 @@ def auditoria_roteiro_view():
                 # minúsculo (apenas estatísticas agregadas). Se a IA falhar,
                 # atingir rate limit ou estiver indisponível, resumo_ia fica
                 # None e a auditoria continua sendo exibida normalmente.
-                resumo_ia = agente_ia.gerar_resumo_auditoria(resultado_auditoria["estatisticas"])
-                ia_indisponivel = resumo_ia is None
+                if agente_ia:
+                    resumo_ia = agente_ia.gerar_resumo_auditoria(resultado_auditoria["estatisticas"])
+                    ia_indisponivel = resumo_ia is None
+                else:
+                    resumo_ia = None
+                    ia_indisponivel = True
             except Exception as error:
                 flash(f"Erro ao executar a auditoria: {error}", "danger")
 
@@ -1136,6 +1154,52 @@ def auditoria_roteiro_view():
         file_name_rastreio=file_name_rastreio,
     )
 
+# ====== ROTA DE UPLOAD - NOVO SISTEMA (ADICIONE ISTO) ======
+
+@app.route("/upload_rastreamento", methods=["POST"])
+def upload_rastreamento():
+    """
+    Rota para upload de arquivos de rastreamento de qualquer fonte.
+    Compatível com SS Telemática, Vivo, TIM, etc.
+    """
+    arquivo = request.files.get("arquivo")
+    nome_fonte = request.form.get("nome_fonte", "GENERICA")
+    
+    if not arquivo:
+        flash("Selecione um arquivo", "warning")
+        return redirect("/")
+    
+    try:
+        # 1. Salvar arquivo temporário
+        caminho_temp = _save_uploaded_file(arquivo)
+        
+        # 2. Ler com novo sistema
+        eventos, stats = ler_rastreamento(caminho_temp, nome_fonte)
+        
+        # 3. Converter para DataFrame (compatível com sistema antigo)
+        df = AdaptadorParaRastreamento.eventos_para_dataframe(eventos)
+        
+        # 4. Guardar na sessão
+        session["df_rastreamento"] = df.to_json()
+        session["stats_rastreamento"] = stats
+        session["fonte_rastreamento"] = nome_fonte
+        
+        # 5. Mostrar resultado
+        flash(
+            f"✅ {stats['eventos_validos']} eventos válidos de {nome_fonte}",
+            "success"
+        )
+        
+    except Exception as e:
+        flash(f"❌ Erro: {str(e)}", "danger")
+    finally:
+        # Limpar arquivo temporário
+        if os.path.exists(caminho_temp):
+            os.unlink(caminho_temp)
+    
+    return redirect("/")
+
+# ============================================================
 
 def _find_available_port(initial_port: int = 5000) -> int:
     port = initial_port
