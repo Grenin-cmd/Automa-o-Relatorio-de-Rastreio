@@ -18,9 +18,15 @@ Este repositório contém um protótipo de agente em Python para analisar rastre
    ```
 4. Use o botão para selecionar seu arquivo CSV ou Excel e clique em "Executar análise".
 
+Ao abrir o sistema, faça login. O usuário inicial é `Victor` com a senha `Victor2005@`.
+Depois do login, escolha a funcionalidade na barra lateral. A base de POIs, as regras de IA
+e o cadastro de usuários ficam em **Configurações**. O usuário Victor pode autorizar outros
+perfis a cadastrar usuários.
+
 O arquivo Excel deve conter colunas com nomes como `timestamp`, `latitude`, `longitude` e `velocidade_kmh` (ou variações compatíveis como `data_hora`, `lat`, `lon` e `speed_kmh`).
 
 Observações:
+- A auditoria de roteiro não exige mais informar uma placa; quando necessário, ela usa todos os registros compatíveis das planilhas.
 - O arquivo carregado fica mantido na sessão do navegador, então você pode trocar a placa e reexecutar a análise sem precisar reenviar o arquivo.
 - Linhas sem informação de POI/local são destacadas em uma tabela separada para facilitar a limpeza dos dados.
 

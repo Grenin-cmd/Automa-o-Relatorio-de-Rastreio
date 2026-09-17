@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from telemetry import track_event  # <-- Adicione aqui, na linha 3!
+from telemetry import track_event
 import hashlib
 import json
 import os
+import re
 import sys
 import threading
 from typing import Any
@@ -76,6 +77,53 @@ class AgenteRefinamento:
         if not OpenAI:
             print("[IA STATUS] AVISO: Biblioteca 'openai' não encontrada. Instale com: pip install openai")
 
+    def _aplicar_regras_local(self, texto: str, regras: list[Any]) -> str:
+        """Aplica regras de negócio de forma determinística quando a IA não está disponível."""
+        texto_final = (texto or "").strip()
+        if not texto_final or not regras:
+            return texto_final
+
+        for regra in regras:
+            texto_regra = _extrair_texto_regra(regra)
+            if not texto_regra:
+                continue
+
+            regra_lower = texto_regra.lower()
+            frases = re.findall(r"['\"]([^'\"]+)['\"]", texto_regra)
+            if not frases:
+                frases = [texto_regra]
+
+            if any(token in regra_lower for token in ["remova", "remover", "retire", "elimine", "exclua", "tirar"]):
+                for frase in frases:
+                    if not frase.strip():
+                        continue
+                    texto_final = re.sub(re.escape(frase), "", texto_final, flags=re.IGNORECASE)
+                    texto_final = re.sub(r"\s{2,}", " ", texto_final)
+                    texto_final = re.sub(r"\s+([.,;:])", r"\1", texto_final)
+                    texto_final = re.sub(r"\s+([\)])", r"\1", texto_final)
+                    texto_final = re.sub(r"([\(])\s+", r"\1", texto_final)
+                    texto_final = texto_final.strip()
+
+            if any(token in regra_lower for token in ["inclua", "adicione", "incluir", "adicionar", "insira", "garanta", "deve conter", "deve ter"]):
+                for frase in frases:
+                    if not frase.strip():
+                        continue
+                    frase_norm = frase.strip()
+                    if frase_norm.lower() not in texto_final.lower():
+                        texto_final = f"{texto_final.rstrip()} — {frase_norm}"
+
+            if any(token in regra_lower for token in ["substitua", "troque", "substituir", "trocar"]) and frases:
+                padrao = frases[0].strip()
+                if padrao and padrao.lower() in texto_final.lower():
+                    texto_final = re.sub(re.escape(padrao), "", texto_final, flags=re.IGNORECASE)
+
+            if "aplique todas as regras" in regra_lower:
+                continue
+
+        texto_final = re.sub(r"\s+([.,;:])", r"\1", texto_final)
+        texto_final = re.sub(r"\s{2,}", " ", texto_final)
+        return texto_final.strip()
+
     def _chamar_ia_com_fallback(self, prompt: str, system_instruction: str | None = None, temperatura: float = 0.2) -> str | None:
         """
         Executa a cascata de IA: OpenRouter -> Google API -> Ollama Local.
@@ -104,30 +152,31 @@ class AgenteRefinamento:
                 )
                 if resposta.choices:
                     print("--> [IA SUCESSO] Resposta gerada via OpenRouter!")
+                    track_event("geracao_ia_sucesso", {"provedor": "openrouter"})
                     return (resposta.choices[0].message.content or "").strip()
             except Exception as e:
                 print(f"[IA FALHA OpenRouter]: {e}")
 
         # ---------------------------------------------------------
-       # ---------------------------------------------------------
         # TENTATIVA 2: Google Gemini (API Direta compatível com OpenAI)
         # ---------------------------------------------------------
         if self.google_key:
-            try:
-                print("--> [IA] Tentando Google Gemini Direto (gemini-1.5-flash)...")
-                client = OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=str(self.google_key))
-                resposta = client.chat.completions.create(
-                    model="gemini-1.5-flash",
-                    messages=messages,
-                    temperature=temperatura,
-                    timeout=_TIMEOUT_SEC
-                )
-                if resposta.choices:
-                    print("--> [IA SUCESSO] Resposta gerada via Google Gemini!")
-                    track_event("geracao_ia_sucesso", {"provedor": "google_gemini"}) # ADICIONE ESTA LINHA
-                    return (resposta.choices[0].message.content or "").strip()
-            except Exception as e:
-                print(f"[IA FALHA Google Gemini]: {e}")
+            for modelo in ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]:
+                try:
+                    print(f"--> [IA] Tentando Google Gemini Direto ({modelo})...")
+                    client = OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta/openai/", api_key=str(self.google_key))
+                    resposta = client.chat.completions.create(
+                        model=modelo,
+                        messages=messages,
+                        temperature=temperatura,
+                        timeout=_TIMEOUT_SEC
+                    )
+                    if resposta.choices:
+                        print(f"--> [IA SUCESSO] Resposta gerada via Google Gemini ({modelo})!")
+                        track_event("geracao_ia_sucesso", {"provedor": "google_gemini"})
+                        return (resposta.choices[0].message.content or "").strip()
+                except Exception as e:
+                    print(f"[IA FALHA Google Gemini {modelo}]: {e}")
 
         # ---------------------------------------------------------
         # TENTATIVA 3: Ollama Local (Totalmente Offline e Sem Limites)
@@ -143,13 +192,15 @@ class AgenteRefinamento:
             )
             if resposta.choices:
                 print("--> [IA SUCESSO] Resposta gerada offline via Ollama!")
+                track_event("geracao_ia_sucesso", {"provedor": "ollama_local"})
                 return (resposta.choices[0].message.content or "").strip()
         except Exception as e:
             print(f"[IA FALHA Ollama Local]: Servidor não está rodando ou modelo não encontrado. ({e})")
 
         # Se todas falharem, retorna None para ativar o Fallback Gracioso (Plano B) na interface
-        track_event("falha_cascata_ia_critica", {"motivo": "todas_tentativas_falharam"}) # ADICIONE ESTA LINHA
+        track_event("falha_cascata_ia_critica", {"motivo": "todas_tentativas_falharam"})
         return None
+
     def refinar_relatorio(self, relatorio_bruto: str, regras: list[Any]) -> str:
         """Aplica as regras de negócio no relatório bruto usando a cascata de IAs."""
         if not relatorio_bruto or relatorio_bruto.strip() in ["", "Nenhum evento detectado."]:
@@ -198,12 +249,16 @@ INSTRUÇÕES:
             temperatura=0.1
         )
 
-        if resultado_ia:
-            self._salvar_no_cache(cache_key, resultado_ia)
-            return resultado_ia
+        resultado_final = resultado_ia if resultado_ia else relatorio_bruto
+        resultado_final = self._aplicar_regras_local(resultado_final, regras)
 
-        # Se todas as IAs falharam, devolve o texto original para o sistema não quebrar
-        return relatorio_bruto
+        if resultado_ia:
+            self._salvar_no_cache(cache_key, resultado_final)
+            return resultado_final
+
+        # Fallback determinístico: mesmo sem IA, as regras continuam aplicadas.
+        self._salvar_no_cache(cache_key, resultado_final)
+        return resultado_final
 
     @staticmethod
     def _salvar_no_cache(cache_key: str, resultado: str) -> None:

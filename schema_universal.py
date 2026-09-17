@@ -9,7 +9,7 @@ Qualquer empresa de rastreio precisa ser convertida para este formato.
 from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 import uuid
 
 
@@ -34,7 +34,7 @@ class EventoRastreamento:
     
     # Origem dos dados
     fonte: str = "GENERICA"  # SS_TELEMATICA, VIVO, TIM, RASTREADOR_XYZ, etc
-    metadata: Dict[str, Any] = None  # Campos adicionais da fonte original
+    metadata: Optional[Dict[str, Any]] = None  # Campos adicionais da fonte original
     
     def __post_init__(self):
         """Valida dados obrigatórios após inicialização"""
@@ -91,16 +91,16 @@ class ConfiguracaoFonteRastreio:
     descricao: Optional[str] = None
     
     # Mapeamento de colunas: chave = coluna no CSV, valor = campo em EventoRastreamento
-    mapa_colunas: Dict[str, str] = None
+    mapa_colunas: Optional[Dict[str, str]] = None
     
     # Aliases: diferentes nomes para a mesma coluna (ex: ["placa", "plate", "vehicle_id"])
-    aliases_colunas: Dict[str, List[str]] = None
+    aliases_colunas: Optional[Dict[str, List[str]]] = None
     
     # Regras de validação customizadas por fonte
-    validacoes: Dict[str, callable] = None
+    validacoes: Optional[Dict[str, Callable[[Any], Any]]] = None
     
     # Transformações customizadas (ex: converter formato de data, unidade de velocidade)
-    transformacoes: Dict[str, callable] = None
+    transformacoes: Optional[Dict[str, Callable[[Any], Any]]] = None
     
     # Exemplo de mapeamento esperado:
     # {

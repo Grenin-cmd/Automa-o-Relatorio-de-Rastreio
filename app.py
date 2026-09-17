@@ -4,6 +4,7 @@ import io
 from io import BytesIO
 import math
 import os
+import re
 import socket
 import sqlite3
 import sys
@@ -13,19 +14,23 @@ import time
 import unicodedata
 import uuid
 import webbrowser
+from functools import wraps
 from typing import Any
 # ====== NOVO SISTEMA DE RASTREAMENTO (ADICIONE ISTO) ======
 from leitor_universal import ler_rastreamento
 from adaptador_compatibilidade import AdaptadorParaRastreamento
 # ========================================================
 
+from dotenv import load_dotenv
+
+from veiculos_service import VeiculosService
+
 # Lock para proteger o cache em memória de POIs/regras contra condições de corrida
 # quando o Flask atende requisições concorrentes (threaded=True).
 _CACHE_LOCK = threading.Lock()
 _POIS_CACHE: list[dict[str, object]] | None = None
 _REGRAS_CACHE: list[dict[str, Any]] | None = None
-
-from dotenv import load_dotenv
+_VEICULOS_SERVICE = VeiculosService()
 
 # 1. Carrega o .env antes de qualquer import de agente
 if getattr(sys, "frozen", False):
@@ -39,7 +44,8 @@ load_dotenv(dotenv_path=env_path, override=True)
 # 2. Imports das bibliotecas e Flask
 import numpy as np
 import pandas as pd
-from flask import Flask, flash, redirect, render_template, request, send_file, session
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
     from docx import Document  # type: ignore[reportMissingImports]
@@ -48,6 +54,8 @@ except ImportError:  # pragma: no cover
 
 # 3. Módulos do sistema (agora seguros, com a chave do Gemini já carregada)
 from analisador_rastreio import RastreamentoAnalyzer
+from dispositivos_service import normalizar_payload_dispositivo
+from veiculos_service import VeiculosService
 try:
     from agente_refinamento import agente_ia
 except (ImportError, Exception) as e:
@@ -64,7 +72,7 @@ def _template_folder() -> str:
 
 
 app = Flask(__name__, template_folder=_template_folder())
-app.secret_key = "mudar_para_uma_chave_secreta"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 
 
 def _persistent_data_dir() -> str:
@@ -80,6 +88,7 @@ def _get_db_connection():
     # synchronous=NORMAL é seguro em modo WAL e evita fsyncs custosos a cada commit.
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 
@@ -121,12 +130,102 @@ def _init_poi_db() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_regras_ativa ON regras_refinamento(ativa);")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id TEXT PRIMARY KEY,
+                nome TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                senha_hash TEXT NOT NULL,
+                pode_cadastrar_usuarios INTEGER NOT NULL DEFAULT 0,
+                ativo INTEGER NOT NULL DEFAULT 1,
+                criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        usuario_inicial = conn.execute(
+            "SELECT id FROM usuarios WHERE nome = ? COLLATE NOCASE", ("Victor",)
+        ).fetchone()
+        if usuario_inicial is None:
+            conn.execute(
+                "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios) VALUES (?, ?, ?, 1)",
+                (uuid.uuid4().hex, "Victor", generate_password_hash("Victor2005@")),
+            )
         conn.commit()
     finally:
         conn.close()
 
 
 _init_poi_db()
+
+
+def _usuario_atual() -> dict[str, Any] | None:
+    usuario_id = session.get("usuario_id")
+    if not usuario_id:
+        return None
+    conn = _get_db_connection()
+    try:
+        row = conn.execute(
+            "SELECT id, nome, pode_cadastrar_usuarios FROM usuarios WHERE id = ? AND ativo = 1",
+            (usuario_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return dict(row) if row else None
+
+
+def _login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if _usuario_atual() is None:
+            return redirect(url_for("login", proxima=request.path))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+def _usuarios_required(view):
+    @wraps(view)
+    @_login_required
+    def wrapped(*args, **kwargs):
+        usuario = _usuario_atual()
+        if not usuario or not usuario["pode_cadastrar_usuarios"]:
+            flash("Você não tem permissão para cadastrar usuários.", "warning")
+            return redirect(url_for("configuracoes"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if _usuario_atual() is not None:
+        return redirect(request.args.get("proxima") or url_for("index"))
+
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        senha = request.form.get("senha", "")
+        conn = _get_db_connection()
+        try:
+            usuario = conn.execute(
+                "SELECT id, nome, senha_hash FROM usuarios WHERE nome = ? COLLATE NOCASE AND ativo = 1",
+                (nome,),
+            ).fetchone()
+        finally:
+            conn.close()
+
+        if usuario and check_password_hash(usuario["senha_hash"], senha):
+            session.clear()
+            session["usuario_id"] = usuario["id"]
+            return redirect(request.args.get("proxima") or url_for("index"))
+        flash("Nome ou senha inválidos.", "danger")
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 def _get_regras_ativas() -> list[dict[str, Any]]:
@@ -172,7 +271,18 @@ def inject_globais():
         pois = _get_saved_pois()
     except Exception:
         pois = []
-    return dict(regras_salvas=_get_regras_ativas(), pois_salvos=pois)
+
+    try:
+        veiculos = _VEICULOS_SERVICE.listar_veiculos()
+    except Exception:
+        veiculos = []
+
+    return dict(
+        regras_salvas=_get_regras_ativas(),
+        pois_salvos=pois,
+        veiculos_ativos=veiculos,
+        usuario_atual=_usuario_atual(),
+    )
 
 
 def _normalize_column_name(name: str) -> str:
@@ -281,11 +391,12 @@ def _adicionar_regra(descricao: str, categoria: str = "GERAL", poi_id: str | Non
 
 
 @app.route("/excluir_regras", methods=["POST"])
+@_login_required
 def excluir_regras():
     regra_ids = request.form.getlist("regra_ids")
     if not regra_ids:
         flash("Nenhuma regra selecionada para exclusão.", "warning")
-        return redirect("/")
+        return redirect(url_for("configuracoes"))
 
     conn = _get_db_connection()
     try:
@@ -298,15 +409,16 @@ def excluir_regras():
     finally:
         conn.close()
         _invalidar_cache_regras()
-    return redirect("/")
+    return redirect(url_for("configuracoes"))
 
 
 @app.route("/excluir_pois", methods=["POST"])
+@_login_required
 def excluir_pois():
     poi_ids = request.form.getlist("poi_ids")
     if not poi_ids:
         flash("Nenhum POI selecionado para exclusão.", "warning")
-        return redirect("/")
+        return redirect(url_for("configuracoes"))
 
     conn = _get_db_connection()
     try:
@@ -319,7 +431,7 @@ def excluir_pois():
     finally:
         conn.close()
         _invalidar_cache_pois()
-    return redirect("/")
+    return redirect(url_for("configuracoes"))
 
 
 def _create_poi_id() -> str:
@@ -725,6 +837,22 @@ def _gerar_resumo_geral_placas(df: pd.DataFrame, pois: list[dict[str, object]], 
         return "Nenhuma placa encontrada no arquivo."
 
     analyzer = RastreamentoAnalyzer(pois=pois, raio_tolerancia_m=raio_tolerancia_m)
+    try:
+        nome_col = _resolver_coluna(
+            working,
+            [
+                "nome_supervisor",
+                "supervisor",
+                "nome_motorista",
+                "motorista",
+                "condutor",
+                "responsavel",
+                "colaborador",
+                "nome",
+            ],
+        )
+    except ValueError:
+        nome_col = None
     lines: list[str] = []
     # groupby computa todos os subsets de placa em uma única passada vetorizada,
     # em vez de refazer o filtro booleano `df[placa_col].astype(str) == placa`
@@ -742,14 +870,139 @@ def _gerar_resumo_geral_placas(df: pd.DataFrame, pois: list[dict[str, object]], 
         if not report_body:
             report_body = "Nenhum evento relevante detectado."
 
-        lines.append(f"{placa}: {report_body}")
+        nome = ""
+        if nome_col:
+            nomes = subset[nome_col].dropna().astype(str).str.strip()
+            nomes = nomes[~nomes.str.lower().isin({"", "nan", "none", "null"})]
+            if not nomes.empty:
+                nome = nomes.iloc[0]
+
+        lines.append(_formatar_linha_resumo(placa, report_body, nome))
 
     resumo_bruto = "\n\n".join(lines)
     if agente_ia:
         regras_ativas = _get_regras_ativas()
-        return agente_ia.refinar_relatorio(resumo_bruto, regras_ativas)
+        resumo_bruto = agente_ia.refinar_relatorio(resumo_bruto, regras_ativas)
+
+    return _separar_resumo_por_placa(resumo_bruto, lines)
+
+
+def _formatar_linha_resumo(placa: str, report_body: str, nome: str = "") -> str:
+    """Formata paradas em residência no padrão operacional dos supervisores."""
+    texto = " ".join(str(report_body).split())
+    residencia_match = re.search(
+        r"\bresid(?:e|ê)ncia(?:\s+(?:de|da|do))?\s+(.+?)(?=\s+(?:desde|às|as|em|na)\b|[.;]|$)",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    nome_exibicao = nome.strip() or (residencia_match.group(1).strip(" .,:;") if residencia_match else "")
+    prefixo = f"{placa} {nome_exibicao}".strip()
+    if not residencia_match:
+        return f"{prefixo}: {texto}"
+
+    saida_match = re.search(
+        r"\b(?:saiu|sa[ií]da)\b.*?\b(?:às|as)\s+(\d{1,2}:\d{2})",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    if saida_match:
+        return f"{prefixo}: Saída da residência as {saida_match.group(1)}."
+
+    if re.search(r"\bestá\s+(?:em|na)\b", texto, flags=re.IGNORECASE):
+        return f"{prefixo}: Está na residência."
+
+    return f"{placa}: {texto}"
+
+
+def _separar_resumo_por_placa(resumo: str, linhas_originais: list[str]) -> str:
+    """Garante uma linha/parágrafo separado para cada placa após o refinamento."""
+    if not resumo or len(linhas_originais) < 2:
+        return resumo
+
+    placas = [linha.split(":", 1)[0].strip() for linha in linhas_originais]
+    for placa in placas[1:]:
+        resumo = re.sub(rf"\s+(?={re.escape(placa)}\s*:)", "\n\n", resumo, count=1)
+    return resumo
+
+
+def _obter_posicoes_placas(df: pd.DataFrame) -> dict[str, tuple[float, float]]:
+    """Retorna a última coordenada válida de cada placa para links de mapa."""
+    try:
+        working = _normalize_columns(df.copy())
+        placa_col = _resolver_coluna(working, ["Placa", "placa", "plate"])
+    except ValueError:
+        return {}
+
+    def _parece_placa_texto(texto: str) -> bool:
+        texto_limpo = re.sub(r"[^A-Z0-9]", "", str(texto).upper())
+        if not texto_limpo:
+            return False
+        return bool(re.fullmatch(r"[A-Z]{2,4}\d{2,5}[A-Z0-9]*", texto_limpo)) or bool(re.fullmatch(r"\d{2,5}[A-Z0-9]{2,5}", texto_limpo))
+
+    def _extrair_par_coordenadas(valor: object) -> tuple[float | None, float | None]:
+        texto = str(valor).strip()
+        if not texto or texto.lower() in {"nan", "none", "null"}:
+            return None, None
+        if _parece_placa_texto(texto):
+            return None, None
+
+        pares = [
+            re.search(r"[?&]q=(-?\d+(?:[.,]\d+)?),\s*(-?\d+(?:[.,]\d+)?)", texto, re.IGNORECASE),
+            re.search(r"@(-?\d+(?:[.,]\d+)?),\s*(-?\d+(?:[.,]\d+)?)", texto, re.IGNORECASE),
+        ]
+        valores = next((match.groups() for match in pares if match), None)
+        if valores is None:
+            numeros = re.findall(r"-?\d+(?:[.,]\d+)?", texto)
+            if len(numeros) < 2:
+                return None, None
+            valores = tuple(numeros[:2])
+
+        latitude = _converter_coordenada(valores[0])
+        longitude = _converter_coordenada(valores[1])
+        if latitude is None or longitude is None or not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            return None, None
+        return latitude, longitude
+
+    lat_col = lon_col = None
+    try:
+        lat_col = _resolver_coluna(working, ["latitude", "lat"])
+        lon_col = _resolver_coluna(working, ["longitude", "lon", "lng"])
+    except ValueError:
+        pass
+
+    if lat_col and lon_col and lat_col != lon_col:
+        working["_latitude_mapa"] = working[lat_col].map(_converter_coordenada)
+        working["_longitude_mapa"] = working[lon_col].map(_converter_coordenada)
     else:
-        return resumo_bruto
+        coluna_combinada = None
+        for aliases in (
+            ["latitude_longitude", "latitude___longitude", "lat_lon", "coordenadas", "coordenada"],
+            ["link_google", "google_maps", "link_mapa"],
+        ):
+            try:
+                coluna_combinada = _resolver_coluna(working, aliases)
+                break
+            except ValueError:
+                continue
+
+        if coluna_combinada is None:
+            return {}
+
+        pares = working[coluna_combinada].map(_extrair_par_coordenadas)
+        working["_latitude_mapa"] = pares.map(lambda par: par[0] if isinstance(par, tuple) else None)
+        working["_longitude_mapa"] = pares.map(lambda par: par[1] if isinstance(par, tuple) else None)
+
+    working = working.dropna(subset=["_latitude_mapa", "_longitude_mapa"])
+    if working.empty:
+        return {}
+
+    posicoes: dict[str, tuple[float, float]] = {}
+    for placa, subset in working.groupby(placa_col, sort=False):
+        placa_texto = str(placa).strip()
+        if placa_texto and placa_texto.lower() != "nan":
+            ultima = subset.iloc[-1]
+            posicoes[placa_texto] = (float(ultima["_latitude_mapa"]), float(ultima["_longitude_mapa"]))
+    return posicoes
 
 
 def _create_word_bytes(summary: str) -> bytes:
@@ -769,6 +1022,7 @@ def _create_word_bytes(summary: str) -> bytes:
 
 
 @app.route("/download_word")
+@_login_required
 def download_word():
     resumo = session.get("word_summary")
     if not resumo:
@@ -787,6 +1041,62 @@ def download_word():
         download_name="resumo_geral_frotas.docx",
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
+
+
+@app.route("/configuracoes", methods=["GET", "POST"])
+@_login_required
+def configuracoes():
+    usuario = _usuario_atual()
+    if request.method == "POST":
+        if not usuario or not usuario["pode_cadastrar_usuarios"]:
+            flash("Você não tem permissão para gerenciar usuários.", "warning")
+            return redirect(url_for("configuracoes"))
+
+        acao = request.form.get("acao")
+        if acao == "criar_usuario":
+            nome = request.form.get("nome", "").strip()
+            senha = request.form.get("senha", "")
+            pode_cadastrar = 1 if request.form.get("pode_cadastrar_usuarios") == "1" else 0
+            if not nome or not senha:
+                flash("Informe nome e senha para cadastrar o usuário.", "warning")
+            else:
+                conn = _get_db_connection()
+                try:
+                    conn.execute(
+                        "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios) VALUES (?, ?, ?, ?)",
+                        (uuid.uuid4().hex, nome, generate_password_hash(senha), pode_cadastrar),
+                    )
+                    conn.commit()
+                    flash(f"Usuário {nome} cadastrado com sucesso.", "success")
+                except sqlite3.IntegrityError:
+                    flash("Já existe um usuário com esse nome.", "warning")
+                finally:
+                    conn.close()
+        elif acao == "alternar_permissao":
+            usuario_id = request.form.get("usuario_id", "")
+            if usuario_id == usuario["id"]:
+                flash("A permissão do seu próprio perfil não pode ser removida.", "warning")
+            else:
+                conn = _get_db_connection()
+                try:
+                    conn.execute(
+                        "UPDATE usuarios SET pode_cadastrar_usuarios = CASE pode_cadastrar_usuarios WHEN 1 THEN 0 ELSE 1 END WHERE id = ?",
+                        (usuario_id,),
+                    )
+                    conn.commit()
+                    flash("Permissão de cadastro atualizada.", "success")
+                finally:
+                    conn.close()
+        return redirect(url_for("configuracoes"))
+
+    conn = _get_db_connection()
+    try:
+        usuarios = [dict(row) for row in conn.execute(
+            "SELECT id, nome, pode_cadastrar_usuarios, ativo FROM usuarios ORDER BY nome COLLATE NOCASE"
+        ).fetchall()]
+    finally:
+        conn.close()
+    return render_template("configuracoes.html", usuarios=usuarios)
 
 
 def carregar_arquivo(uploaded_file) -> pd.DataFrame:
@@ -850,6 +1160,7 @@ def carregar_arquivo(uploaded_file) -> pd.DataFrame:
 
 
 @app.route("/", methods=["GET", "POST"])
+@_login_required
 def index():
     report = None
     pois_text = (
@@ -857,7 +1168,6 @@ def index():
         "PostoX:posto:-23.5600:-46.6400:250:120:10"
     )
     placa_escolhida = request.form.get("placa", "")
-    tipo_veiculo = request.form.get("tipo_veiculo", "pesado")
     try:
         raio_suspeita = float(request.form.get("raio_suspeita", 200) or 200)
     except (TypeError, ValueError):
@@ -868,6 +1178,7 @@ def index():
     missing_columns: list[str] = []
     placas: list[str] = []
     resumo_geral = None
+    posicoes_placas: dict[str, tuple[float, float]] = {}
     paradas_suspeitas: list[dict[str, object]] = []
     timeline_eventos: list[dict[str, object]] = []
     docx_available = Document is not None
@@ -917,7 +1228,7 @@ def index():
                     flash(f"{len(imported_pois)} POI(s) importado(s) com sucesso.", "success")
                 except Exception as error:
                     flash(f"Erro ao processar POIs: {error}", "danger")
-            return redirect("/")
+            return redirect(url_for("configuracoes"))
 
         if arquivo and arquivo.filename:
             try:
@@ -940,7 +1251,6 @@ def index():
                 "index.html",
                 report=report,
                 placa_escolhida=placa_escolhida,
-                tipo_veiculo=tipo_veiculo,
                 raio_suspeita=raio_suspeita,
                 paradas_suspeitas=paradas_suspeitas,
                 timeline_eventos=timeline_eventos,
@@ -963,7 +1273,6 @@ def index():
                 "index.html",
                 report=report,
                 placa_escolhida=placa_escolhida,
-                tipo_veiculo=tipo_veiculo,
                 raio_suspeita=raio_suspeita,
                 paradas_suspeitas=paradas_suspeitas,
                 timeline_eventos=timeline_eventos,
@@ -989,15 +1298,14 @@ def index():
             pois_ajustados.append(p_copia)
 
         analyzer = RastreamentoAnalyzer(pois=pois_ajustados, raio_tolerancia_m=raio_suspeita)
-        limite_velocidade_kmh = 95.0 if tipo_veiculo == "pesado" else 110.0
+        limite_velocidade_kmh = 110.0
         regras_ativas = _get_regras_ativas()
 
         # 3. Executa a Ação Solicitada
         try:
             if action == "summary":
                 resumo_geral = _gerar_resumo_geral_placas(df_full, pois_ajustados, raio_tolerancia_m=raio_suspeita)
-                if agente_ia:
-                    resumo_geral = agente_ia.refinar_relatorio(resumo_geral, _get_regras_ativas())
+                posicoes_placas = _obter_posicoes_placas(df_full)
                 session["word_summary"] = resumo_geral
             elif action == "timeline":
                 timeline_eventos = _gerar_timeline_viagem(df_full, placa_escolhida, pois_ajustados, limite_velocidade_kmh, raio_suspeita)
@@ -1013,13 +1321,13 @@ def index():
             "index.html",
             report=report,
             placa_escolhida=placa_escolhida,
-            tipo_veiculo=tipo_veiculo,
             raio_suspeita=raio_suspeita,
             paradas_suspeitas=paradas_suspeitas,
             timeline_eventos=timeline_eventos,
             placas=placas,
             file_name=file_name,
             resumo_geral=resumo_geral,
+            posicoes_placas=posicoes_placas,
             docx_available=docx_available,
         )
 
@@ -1027,18 +1335,19 @@ def index():
         "index.html",
         report=report,
         placa_escolhida="",
-        tipo_veiculo=tipo_veiculo,
         raio_suspeita=raio_suspeita,
         paradas_suspeitas=paradas_suspeitas,
         timeline_eventos=timeline_eventos,
         placas=[],
         file_name=file_name,
         resumo_geral=resumo_geral,
+        posicoes_placas=posicoes_placas,
         docx_available=docx_available,
     )
 
 
 @app.route("/adicionar_regra_feedback", methods=["POST"])
+@_login_required
 def adicionar_regra_feedback():
     descricao = request.form.get("descricao_regra", "").strip()
     categoria = request.form.get("categoria", "GERAL").strip()
@@ -1050,10 +1359,11 @@ def adicionar_regra_feedback():
         _adicionar_regra(descricao, categoria, poi_id)
         flash("Instrução de IA salva com sucesso!", "success")
 
-    return redirect("/")
+    return redirect(url_for("configuracoes"))
 
 
 @app.route("/auditoria_roteiro", methods=["GET", "POST"])
+@_login_required
 def auditoria_roteiro_view():
     """Módulo de Auditoria de Roteiro: cruza a planilha de carregamento
     (romaneio) com o log de rastreio de uma placa específica, usando uma
@@ -1102,8 +1412,6 @@ def auditoria_roteiro_view():
             flash("Envie a planilha de carregamento (romaneio) para continuar.", "warning")
         elif not caminho_rastreio or not os.path.exists(caminho_rastreio):
             flash("Envie o arquivo de logs de rastreio para continuar.", "warning")
-        elif not placa_escolhida:
-            flash("Informe a placa do veículo para executar a auditoria.", "warning")
         else:
             try:
                 df_carregamento = carregar_arquivo(caminho_carregamento)
@@ -1157,6 +1465,7 @@ def auditoria_roteiro_view():
 # ====== ROTA DE UPLOAD - NOVO SISTEMA (ADICIONE ISTO) ======
 
 @app.route("/upload_rastreamento", methods=["POST"])
+@_login_required
 def upload_rastreamento():
     """
     Rota para upload de arquivos de rastreamento de qualquer fonte.
@@ -1200,6 +1509,57 @@ def upload_rastreamento():
     return redirect("/")
 
 # ============================================================
+
+def _registrar_dispositivo_recebido(payload: dict[str, Any]) -> dict[str, Any]:
+    normalizado = normalizar_payload_dispositivo(payload)
+    veiculo = _VEICULOS_SERVICE.registrar_ou_atualizar(payload)
+
+    recentes = session.get("dispositivos_recentes", [])
+    recentes.insert(0, {
+        **normalizado,
+        "veiculo_id": veiculo["veiculo_id"],
+    })
+    session["dispositivos_recentes"] = recentes[:20]
+    session.modified = True
+    return {
+        **normalizado,
+        "veiculo_id": veiculo["veiculo_id"],
+        "ultima_posicao": veiculo["ultima_posicao"],
+    }
+
+
+@app.route("/api/dispositivos/receber", methods=["POST"])
+def api_receber_dispositivo():
+    try:
+        payload = request.get_json(silent=True)
+        if payload is None:
+            payload = request.form.to_dict()
+        if not payload:
+            return {"ok": False, "erro": "Nenhum payload recebido."}, 400
+
+        if not isinstance(payload, dict):
+            return {"ok": False, "erro": "Payload deve ser um objeto JSON."}, 400
+
+        normalizado = _registrar_dispositivo_recebido(payload)
+        return {
+            "ok": True,
+            "mensagem": "Payload do dispositivo recebido e normalizado.",
+            "dados": normalizado,
+        }, 200
+    except Exception as error:
+        return {"ok": False, "erro": str(error)}, 400
+
+
+@app.route("/api/dispositivos/recentes", methods=["GET"])
+def api_dispositivos_recentes():
+    recentes = session.get("dispositivos_recentes", [])
+    return {"ok": True, "dados": recentes}, 200
+
+
+@app.route("/api/veiculos", methods=["GET"])
+def api_veiculos():
+    return {"ok": True, "dados": _VEICULOS_SERVICE.listar_veiculos()}, 200
+
 
 def _find_available_port(initial_port: int = 5000) -> int:
     port = initial_port

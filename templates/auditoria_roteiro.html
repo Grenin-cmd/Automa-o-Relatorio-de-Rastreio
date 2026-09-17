@@ -126,6 +126,28 @@
   .flash-success { background: var(--success-soft); color: var(--success); border: 1px solid var(--success); }
 
   .oculto { display: none; }
+  .settings-fab {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 1000;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 5px 14px rgba(79, 70, 229, 0.28);
+    font-family: Arial, sans-serif;
+    font-size: 1.3rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+  }
+  .settings-fab:hover { opacity: 0.92; transform: translateY(-1px); }
 </style>
 </head>
 <body>
@@ -135,6 +157,7 @@
     <h1>Auditoria de Roteiro</h1>
     <p>Planejado &times; Executado por Proximidade GPS</p>
     <a class="voltar" href="/">&larr; Voltar para Análise de Frotas</a>
+    <a class="voltar" href="/logout">Sair de {{ usuario_atual.nome }}</a>
   </div>
 
   <form method="POST" enctype="multipart/form-data" class="sidebar-body" id="formAuditoria">
@@ -155,23 +178,6 @@
       {% if file_name_rastreio %}
         <span style="font-size: 0.72rem; color: var(--neutral-dark); font-weight: 600;">{{ file_name_rastreio }}</span>
       {% endif %}
-    </div>
-
-    <div class="form-group">
-      <label>Placa do Veículo</label>
-      {% if placas_disponiveis %}
-        <select name="placa_auditoria" id="inputPlacaSelect">
-          <option value="">Selecione...</option>
-          {% for p in placas_disponiveis %}
-            <option value="{{ p }}" {% if p == placa_escolhida %}selected{% endif %}>{{ p }}</option>
-          {% endfor %}
-        </select>
-      {% endif %}
-      <input type="text" name="placa_auditoria" id="inputPlacaTexto" placeholder="Ex: ABC1234"
-             value="{{ placa_escolhida }}"
-             <input type="text" name="placa_auditoria" id="inputPlacaTexto" placeholder="Ex: ABC1234"
-       value="{{ placa_escolhida }}"
-       {% if placas_disponiveis %}style="display:none;"{% endif %}>
     </div>
 
     <div class="form-group">
@@ -274,11 +280,13 @@
         </table>
       </div>
     {% else %}
-      <div class="empty-state">Envie a planilha de carregamento e o log de rastreio, selecione a placa e a tolerância na barra lateral, e clique em "Executar Auditoria".</div>
+      <div class="empty-state">Envie a planilha de carregamento e o log de rastreio, informe a tolerância e clique em "Executar Auditoria".</div>
     {% endif %}
   </div>
 
 </main>
+
+<a class="settings-fab" href="/configuracoes" aria-label="Configurações" title="Configurações">&#9881;&#65038;</a>
 
 <script>
   function atualizarEstadoBotao() {
@@ -287,17 +295,6 @@
     
     const carregamento = inputCarreg && inputCarreg.files ? inputCarreg.files.length > 0 : false;
     const rastreio = inputRast && inputRast.files ? inputRast.files.length > 0 : false;
-
-    const selectPlaca = document.getElementById('inputPlacaSelect');
-    const textoPlaca = document.getElementById('inputPlacaTexto');
-    
-    let placa = '';
-    if (selectPlaca && selectPlaca.style.display !== 'none' && selectPlaca.value) {
-      placa = selectPlaca.value;
-    } else if (textoPlaca && textoPlaca.value) {
-      placa = textoPlaca.value;
-    }
-    placa = placa.trim();
 
     const inputTol = document.getElementById('inputTolerancia');
     const tolerancia = inputTol ? inputTol.value : '';
@@ -310,7 +307,7 @@
     const temCarregamento = carregamento || jaTemCarregamento;
     const temRastreio = rastreio || jaTemRastreio;
 
-    const habilitado = temCarregamento && temRastreio && placa.length > 0 && tolerancia && Number(tolerancia) > 0;
+    const habilitado = temCarregamento && temRastreio && tolerancia && Number(tolerancia) > 0;
     
     const btnExec = document.getElementById('btnExecutarAuditoria');
     if (btnExec) {
@@ -319,7 +316,7 @@
   }
 
   // Adiciona os event listeners com total segurança contra elementos nulos
-  ['inputCarregamento', 'inputRastreio', 'inputTolerancia', 'inputPlacaSelect', 'inputPlacaTexto'].forEach(id => {
+  ['inputCarregamento', 'inputRastreio', 'inputTolerancia'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener('input', atualizarEstadoBotao);

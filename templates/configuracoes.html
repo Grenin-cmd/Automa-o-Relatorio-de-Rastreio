@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configurações | Análise Inteligente de Frotas</title>
+<style>
+  :root { --ink: #172033; --muted: #6b7280; --line: #dce3ec; --soft: #f5f7fa; --accent: #6d3df5; --danger: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; background: #f7f9fc; color: var(--ink); font: 14px Arial, sans-serif; }
+  aside { width: 260px; flex: 0 0 260px; min-height: 100vh; padding: 24px 18px; background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  aside h1 { margin: 0 0 4px; font: 700 17px Georgia, serif; } aside p { margin: 0 0 28px; color: var(--muted); font-size: 12px; }
+  nav { display: grid; gap: 8px; } nav a { padding: 11px 12px; color: var(--ink); text-decoration: none; border: 1px solid transparent; } nav a:hover, nav a.active { background: var(--soft); border-color: var(--line); }
+  .logout { margin-top: auto; color: var(--muted); text-decoration: none; font-size: 12px; }
+  main { width: min(1100px, 100%); padding: 42px; } header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 26px; } h2 { margin: 0; font: 700 25px Georgia, serif; } .user { color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; } section { background: #fff; border: 1px solid var(--line); padding: 22px; } h3 { margin: 0 0 7px; font-size: 15px; } .hint { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  label { display: block; margin: 12px 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; } input { width: 100%; padding: 10px; border: 1px solid var(--line); } button { margin-top: 14px; padding: 10px 13px; border: 0; background: var(--ink); color: #fff; cursor: pointer; font-weight: 700; } button.secondary { background: var(--soft); color: var(--ink); border: 1px solid var(--line); margin: 0; padding: 7px 9px; font-size: 11px; }
+  .upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .upload input { flex: 1; min-width: 180px; } .count { color: var(--muted); font-size: 12px; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; } th, td { padding: 10px 6px; text-align: left; border-bottom: 1px solid var(--line); } th { color: var(--muted); font-size: 10px; text-transform: uppercase; } .flash { padding: 11px 14px; margin-bottom: 18px; background: #eefbf3; border: 1px solid #b7ebc8; color: #176b37; } .flash-warning { background: #fff8e6; border-color: #f2d38a; color: #855b00; } .flash-danger { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+  @media (max-width: 720px) { body { display: block; } aside { width: 100%; min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); } .logout { margin-top: 18px; } main { padding: 24px 16px; } header { display: block; } .user { margin-top: 8px; } }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Análise Inteligente de Frotas</h1><p>Auditoria & Telemetria com IA</p>
+  <nav>
+    <a href="/?feature=analysis">Análise de rastreio</a>
+    <a href="/auditoria_roteiro">Auditoria de roteiro</a>
+    <a href="/configuracoes" class="active" aria-label="Configurações" title="Configurações">&#9881;</a>
+  </nav>
+  <a class="logout" href="/logout">Sair de {{ usuario_atual.nome }}</a>
+</aside>
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <header><h2>Configurações</h2><span class="user">Perfil ativo: {{ usuario_atual.nome }}</span></header>
+  <div class="grid">
+    <section>
+      <h3>Base de POIs</h3><p class="hint">Importe ou substitua a base de pontos de interesse usada nas análises.</p>
+      <form class="upload" method="post" action="/">
+        <input type="hidden" name="action" value="import_pois">
+        <input type="file" name="arquivo_pois" accept=".csv,.xls,.xlsx" required>
+        <button type="submit">Importar base</button>
+      </form>
+      <div class="count">{{ pois_salvos|length if pois_salvos else 0 }} ponto(s) cadastrado(s)</div>
+      {% if pois_salvos %}
+      <table><thead><tr><th>Nome</th><th>Tipo</th><th>Raio</th></tr></thead><tbody>{% for poi in pois_salvos[:12] %}<tr><td>{{ poi.nome }}</td><td>{{ poi.tipo }}</td><td>{{ poi.raio_metros|int }}m</td></tr>{% endfor %}</tbody></table>
+      {% endif %}
+    </section>
+    <section>
+      <h3>Regras de IA</h3><p class="hint">Instruções aplicadas ao refinamento dos relatórios.</p>
+      <form method="post" action="/adicionar_regra_feedback">
+        <label for="categoria">Categoria</label><input id="categoria" name="categoria" value="GERAL">
+        <label for="descricao_regra">Instrução</label><input id="descricao_regra" name="descricao_regra" placeholder="Ex: padronize os nomes dos locais" required>
+        <button type="submit">Adicionar regra</button>
+      </form>
+      <div class="count">{{ regras_salvas|length if regras_salvas else 0 }} regra(s) ativa(s)</div>
+      {% if regras_salvas %}<table><thead><tr><th>Categoria</th><th>Descrição</th><th></th></tr></thead><tbody>{% for regra in regras_salvas %}<tr><td>{{ regra.categoria }}</td><td>{{ regra.descricao }}</td><td><form method="post" action="/excluir_regras"><input type="hidden" name="regra_ids" value="{{ regra.id }}"><button class="secondary" type="submit">Excluir</button></form></td></tr>{% endfor %}</tbody></table>{% endif %}
+    </section>
+    {% if usuario_atual.pode_cadastrar_usuarios %}
+    <section>
+      <h3>Usuários e permissões</h3><p class="hint">Somente perfis autorizados podem criar novos acessos e liberar esta área.</p>
+      <form method="post">
+        <input type="hidden" name="acao" value="criar_usuario">
+        <label for="novo_nome">Nome</label><input id="novo_nome" name="nome" required>
+        <label for="nova_senha">Senha</label><input id="nova_senha" name="senha" type="password" required>
+        <label><input type="checkbox" name="pode_cadastrar_usuarios" value="1" style="width:auto; margin-right:6px;"> Pode cadastrar usuários</label>
+        <button type="submit">Cadastrar usuário</button>
+      </form>
+      <table><thead><tr><th>Nome</th><th>Permissão</th><th></th></tr></thead><tbody>{% for usuario in usuarios %}<tr><td>{{ usuario.nome }}</td><td>{{ 'Autorizado' if usuario.pode_cadastrar_usuarios else 'Sem acesso' }}</td><td>{% if usuario.id != usuario_atual.id %}<form method="post"><input type="hidden" name="acao" value="alternar_permissao"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="secondary" type="submit">Alternar</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+    </section>
+    {% endif %}
+  </div>
+</main>
+</body>
+</html>

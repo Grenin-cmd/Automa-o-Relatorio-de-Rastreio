@@ -356,16 +356,6 @@ class RastreamentoAnalyzer:
         last_poi = self._poi_key(last_poi_raw)
         dist_csv = float(last_row[distance_col])
 
-        # === DIAGNÓSTICO TEMPORÁRIO ===
-        print(f"\n--- DIAGNÓSTICO ÚLTIMA LINHA ---")
-        print(f"Velocidade: {last_row[speed_col]} (Parado: {last_stopped})")
-        print(f"POI CSV: '{last_poi_raw}' (Key: '{last_poi}')")
-        print(f"Distância CSV: {dist_csv} m")
-        print(f"Raio configurado no Analyzer: {self.raio_tolerancia_m} m")
-        print(f"Tem colunas GPS: {'latitude' in df.columns and 'longitude' in df.columns}")
-        if 'latitude' in df.columns:
-            print(f"Lat/Lon: {last_row.get('latitude')}, {last_row.get('longitude')}")
-        print(f"--------------------------------\n")
         last_stopped = float(last_row[speed_col]) <= self.velocidade_limite_kmh
         last_endereco = str(last_row[endereco_col]).strip() if endereco_col and pd.notna(last_row[endereco_col]) else None
         last_poi_raw = str(last_row[poi_col]).strip() if pd.notna(last_row[poi_col]) else ""
@@ -388,8 +378,7 @@ class RastreamentoAnalyzer:
         if not stops:
             if last_poi_inside:
                 if last_poi == "matriz":
-                    label_matriz = self._label_com_localizacao("matriz", "Matriz", last_endereco)
-                    return f"Está na {label_matriz} desde {self._format_relative_time(last_row[timestamp_col], reference_date)}."
+                    return f"Está na matriz desde {self._format_relative_time(last_row[timestamp_col], reference_date)}."
                 label_atual = self._label_com_localizacao(last_poi, self._poi_label(last_poi_raw), last_endereco)
                 return f"Está em {label_atual} desde {self._format_relative_time(last_row[timestamp_col], reference_date)}."
             if last_stopped:
@@ -401,8 +390,7 @@ class RastreamentoAnalyzer:
             label = self._label_com_localizacao(stop["poi"], stop.get("label") or self._poi_label(stop["poi"]), stop.get("endereco"))
             if stop["saida"] is None:
                 if stop["poi"] == "matriz":
-                    label_matriz = self._label_com_localizacao("matriz", "Matriz", stop.get("endereco"))
-                    lines.append(f"Está na {label_matriz} desde {self._format_relative_time(stop['inicio'], reference_date)}.")
+                    lines.append(f"Está na matriz desde {self._format_relative_time(stop['inicio'], reference_date)}.")
                 else:
                     lines.append(f"Está em {label} desde {self._format_relative_time(stop['inicio'], reference_date)}.")
             else:
@@ -490,6 +478,28 @@ class RastreamentoAnalyzer:
                     temp_exit_time = None
             else:
                 if inside:
+                    if poi_key and poi_key != current_poi:
+                        finalize_stop(current_poi, current_label, entry_start, entry_end, current_time, current_endereco)
+                        inside = False
+                        current_poi = None
+                        current_label = None
+                        current_endereco = None
+                        entry_start = None
+                        entry_end = None
+                        temp_exit_time = None
+                        continue
+
+                    if float(row[speed_col]) > self.velocidade_limite_kmh:
+                        finalize_stop(current_poi, current_label, entry_start, entry_end, current_time, current_endereco)
+                        inside = False
+                        current_poi = None
+                        current_label = None
+                        current_endereco = None
+                        entry_start = None
+                        entry_end = None
+                        temp_exit_time = None
+                        continue
+
                     if temp_exit_time is None:
                         temp_exit_time = current_time
 
