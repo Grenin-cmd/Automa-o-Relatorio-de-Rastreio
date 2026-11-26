@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from collections import deque
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -10,11 +12,23 @@ from dispositivos_service import normalizar_payload_dispositivo
 class VeiculosService:
     """Gerencia veículos, dispositivos e última posição recebida."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_recentes: int = 20) -> None:
         self._veiculos: dict[str, dict[str, Any]] = {}
         self._dispositivos: dict[str, dict[str, Any]] = {}
+        # Últimos payloads recebidos (antes ficavam na sessão/cookie de quem
+        # chamava a API, o que não fazia sentido para um rastreador).
+        self._recentes: deque[dict[str, Any]] = deque(maxlen=max_recentes)
+        self._lock = threading.RLock()
 
     def registrar_ou_atualizar(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._lock:
+            return self._registrar_ou_atualizar(payload)
+
+    def listar_recentes(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [deepcopy(item) for item in self._recentes]
+
+    def _registrar_ou_atualizar(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalizado = normalizar_payload_dispositivo(payload)
         placa = str(payload.get("placa") or payload.get("plate") or payload.get("veiculo") or "SEM_PLACA").strip().upper()
         dispositivo_id = str(normalizado["dispositivo_id"])
@@ -53,6 +67,10 @@ class VeiculosService:
             "bateria_pct": normalizado.get("bateria_pct"),
         }
 
+        recente = {k: v for k, v in normalizado.items() if k != "raw"}
+        recente["veiculo_id"] = placa
+        self._recentes.appendleft(recente)
+
         return {
             "veiculo_id": veiculo["veiculo_id"],
             "dispositivo_id": veiculo["dispositivo_id"],
@@ -61,6 +79,10 @@ class VeiculosService:
         }
 
     def listar_veiculos(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return self._listar_veiculos()
+
+    def _listar_veiculos(self) -> list[dict[str, Any]]:
         return [
             {
                 "veiculo_id": v["veiculo_id"],

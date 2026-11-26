@@ -24,7 +24,7 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% for category, message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
     {% endwith %}
-    <form method="post">
+    <form method="post">{{ csrf_input() }}
       <label for="nome">Nome</label>
       <input id="nome" name="nome" autocomplete="username" required autofocus>
       <label for="senha">Senha</label>

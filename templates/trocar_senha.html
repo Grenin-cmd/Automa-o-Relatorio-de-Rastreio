@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trocar senha | Análise Inteligente de Frotas</title>
+<style>
+  :root { --ink: #172033; --muted: #6b7280; --line: #d9e0ea; --soft: #f4f7fb; --accent: #6d3df5; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: linear-gradient(135deg, #f7f9fc, #eef2f8); color: var(--ink); font-family: Georgia, 'Times New Roman', serif; }
+  .login { width: min(420px, calc(100% - 32px)); background: #fff; border: 1px solid var(--line); padding: 38px; box-shadow: 0 18px 50px rgba(23, 32, 51, .08); }
+  h1 { margin: 0 0 8px; font-size: 1.55rem; }
+  p { color: var(--muted); margin: 0 0 28px; font: .86rem/1.5 Arial, sans-serif; }
+  label { display: block; margin: 16px 0 6px; font: 700 .75rem Arial, sans-serif; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  input { width: 100%; padding: 12px; border: 1px solid var(--line); font: .95rem Arial, sans-serif; }
+  button { width: 100%; margin-top: 22px; padding: 12px; border: 0; background: var(--ink); color: #fff; cursor: pointer; font: 700 .86rem Arial, sans-serif; }
+  .flash { padding: 10px 12px; margin-bottom: 8px; background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239; font: .82rem Arial, sans-serif; }
+  .flash-success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+  .flash-warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+  .voltar { display: block; margin-top: 16px; text-align: center; color: var(--muted); font: .82rem Arial, sans-serif; }
+</style>
+</head>
+<body>
+  <main class="login">
+    <h1>Trocar senha</h1>
+    {% if obrigatoria %}
+      <p>Por segurança, defina uma nova senha antes de continuar.</p>
+    {% else %}
+      <p>Informe a senha atual e escolha uma nova (mínimo de 8 caracteres).</p>
+    {% endif %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+    {% endwith %}
+    <form method="post">
+      {{ csrf_input() }}
+      <label for="senha_atual">Senha atual</label>
+      <input id="senha_atual" name="senha_atual" type="password" autocomplete="current-password" required autofocus>
+      <label for="nova_senha">Nova senha</label>
+      <input id="nova_senha" name="nova_senha" type="password" autocomplete="new-password" minlength="8" required>
+      <label for="confirmacao">Confirme a nova senha</label>
+      <input id="confirmacao" name="confirmacao" type="password" autocomplete="new-password" minlength="8" required>
+      <button type="submit">Salvar nova senha</button>
+    </form>
+    {% if obrigatoria %}
+      <a class="voltar" href="/logout">Sair</a>
+    {% else %}
+      <a class="voltar" href="/">Voltar</a>
+    {% endif %}
+  </main>
+</body>
+</html>

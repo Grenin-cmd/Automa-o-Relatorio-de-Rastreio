@@ -19,11 +19,16 @@ jobs:
       - name: Instalar dependencias e PyInstaller
         run: |
           python -m pip install --upgrade pip
-          pip install flask pandas openpyxl python-dotenv google-genai pyinstaller
+          pip install -r requirements.txt pyinstaller
+
+      - name: Rodar testes antes do build
+        run: |
+          pip install pytest
+          python -m pytest -q
 
       - name: Gerar Executavel Windows (.exe)
         run: |
-          pyinstaller --noconfirm --onedir --add-data "templates;templates" --collect-all google.genai --collect-all dotenv --hidden-import=dotenv --hidden-import=pandas --hidden-import=openpyxl --name "Automacao_Relatorio_Rastreio" app.py
+          pyinstaller --noconfirm --onedir --add-data "templates;templates" --collect-all openai --collect-all dotenv --collect-all docx --hidden-import=dotenv --hidden-import=pandas --hidden-import=openpyxl --hidden-import=python_calamine --name "Automacao_Relatorio_Rastreio" app.py
 
       - name: Disponibilizar arquivo para Download
         uses: actions/upload-artifact@v4

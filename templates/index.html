@@ -206,7 +206,7 @@
 
   {% set show_analysis = request.args.get('feature') == 'analysis' or file_name %}
   {% if show_analysis %}
-  <form method="POST" action="/?feature=analysis" enctype="multipart/form-data" class="sidebar-body">
+  <form method="POST" action="/?feature=analysis" enctype="multipart/form-data" class="sidebar-body">{{ csrf_input() }}
     
     <div class="form-group">
       <label>Planilha (.xlsx, .csv)</label>
@@ -411,14 +411,14 @@
     
     <div class="modal-body">
       <!-- Upload Planilha POIs -->
-      <form method="POST" enctype="multipart/form-data" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+      <form method="POST" enctype="multipart/form-data" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">{{ csrf_input() }}
         <label style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); display: block; margin-bottom: 6px;">Importar Nova Planilha de POIs</label>
         <input type="file" name="arquivo_pois" accept=".csv,.xls,.xlsx" style="width: 100%;">
         <button type="submit" name="action" value="import_pois" class="btn btn-primary" style="margin-top: 10px; width: 100%;">Atualizar Base com Planilha</button>
       </form>
 
       <!-- Lista POIs -->
-      <form id="formExclusaoPOIs" method="POST" action="/excluir_pois">
+      <form id="formExclusaoPOIs" method="POST" action="/excluir_pois">{{ csrf_input() }}
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
             POIs Cadastrados (<span id="contagemPOIs">{{ pois_salvos|length if pois_salvos else 0 }}</span>)
@@ -431,7 +431,8 @@
         </div>
 
         {% if pois_salvos %}
-          <input type="text" class="search-input" placeholder="🔍 Digite para filtrar POIs pelo nome..." onkeyup="filtrarPOIs(this.value)">
+          <input type="text" class="search-input" id="buscaPOIs" placeholder="🔍 Digite para buscar POIs por nome, cidade ou tipo..." oninput="filtrarPOIs(this.value)">
+          <p id="infoPOIs" style="font-size: 0.72rem; color: var(--text-muted); margin: 4px 0 6px;"></p>
         {% endif %}
 
         {% if pois_salvos %}
@@ -445,20 +446,7 @@
                   <th>Coordenadas</th>
                 </tr>
               </thead>
-              <tbody>
-                {% for p in pois_salvos %}
-                  <tr class="poi-row">
-                    <td>
-                      <input type="checkbox" name="poi_ids" value="{{ p.id }}" class="poi-checkbox" style="accent-color: var(--danger);">
-                    </td>
-                    <td class="poi-name" style="font-weight: 600;">{{ p.nome }}</td>
-                    <td>{{ p.raio_metros|int }}m</td>
-                    <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-muted);">
-                      {{ "%.4f"|format(p.latitude) }}, {{ "%.4f"|format(p.longitude) }}
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
+              <tbody id="corpoTabelaPOIs"></tbody>
             </table>
           </div>
         {% else %}
@@ -487,7 +475,7 @@
     </div>
     <div class="modal-body">
       <!-- Formulário Regras -->
-      <form method="POST" action="/adicionar_regra_feedback" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+      <form method="POST" action="/adicionar_regra_feedback" style="background: #f8fafc; padding: 12px; border-radius: 6px; border: 1px solid var(--border);">{{ csrf_input() }}
         <div style="margin-bottom: 8px;">
           <label style="font-size: 0.74rem; font-weight: 600; color: var(--text-muted); display: block; margin-bottom: 4px;">Categoria</label>
           <select name="categoria" style="width: 100%; font-size: 0.8rem; padding: 6px;">
@@ -504,7 +492,7 @@
       </form>
 
       <!-- Lista Regras -->
-      <form id="formExclusaoEmLote" method="POST" action="/excluir_regras">
+      <form id="formExclusaoEmLote" method="POST" action="/excluir_regras">{{ csrf_input() }}
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <span style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Instruções Cadastradas</span>
           {% if regras_salvas %}
@@ -567,15 +555,50 @@
   function abrirModalRegras() { document.getElementById('modalRegras').classList.add('active'); }
   function fecharModalRegras() { document.getElementById('modalRegras').classList.remove('active'); }
 
-  function abrirModalPOIs() { document.getElementById('modalPOIs').classList.add('active'); }
+  let _timerBuscaPOIs = null;
+
+  function abrirModalPOIs() {
+    document.getElementById('modalPOIs').classList.add('active');
+    const busca = document.getElementById('buscaPOIs');
+    carregarPOIs(busca ? busca.value : '');
+  }
   function fecharModalPOIs() { document.getElementById('modalPOIs').classList.remove('active'); }
 
   function filtrarPOIs(termo) {
-    termo = termo.toLowerCase();
-    document.querySelectorAll('.poi-row').forEach(row => {
-      const nome = row.querySelector('.poi-name').innerText.toLowerCase();
-      row.style.display = nome.includes(termo) ? '' : 'none';
-    });
+    clearTimeout(_timerBuscaPOIs);
+    _timerBuscaPOIs = setTimeout(() => carregarPOIs(termo), 250);
+  }
+
+  function _escaparHTML(texto) {
+    const div = document.createElement('div');
+    div.textContent = texto == null ? '' : String(texto);
+    return div.innerHTML;
+  }
+
+  async function carregarPOIs(termo) {
+    const corpo = document.getElementById('corpoTabelaPOIs');
+    const info = document.getElementById('infoPOIs');
+    if (!corpo) return;
+    try {
+      const resp = await fetch('/api/pois?limite=200&q=' + encodeURIComponent(termo || ''), { credentials: 'same-origin' });
+      const json = await resp.json();
+      if (!json.ok) throw new Error(json.erro || 'Falha ao carregar POIs');
+      corpo.innerHTML = json.dados.map(p => `
+        <tr class="poi-row">
+          <td><input type="checkbox" name="poi_ids" value="${_escaparHTML(p.id)}" class="poi-checkbox" style="accent-color: var(--danger);"></td>
+          <td class="poi-name" style="font-weight: 600;">${_escaparHTML(p.nome)}</td>
+          <td>${Math.round(Number(p.raio_metros) || 0)}m</td>
+          <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-muted);">${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}</td>
+        </tr>`).join('');
+      if (info) {
+        info.textContent = json.total > json.dados.length
+          ? `Mostrando ${json.dados.length} de ${json.total} resultado(s). Refine a busca para ver outros.`
+          : `${json.total} resultado(s).`;
+      }
+    } catch (erro) {
+      corpo.innerHTML = '';
+      if (info) info.textContent = 'Não foi possível carregar os POIs: ' + erro.message;
+    }
   }
 
   function filtrarRegras(termo) {

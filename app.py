@@ -16,13 +16,14 @@ import uuid
 import webbrowser
 from functools import wraps
 from typing import Any
-# ====== NOVO SISTEMA DE RASTREAMENTO (ADICIONE ISTO) ======
+from urllib.parse import urlsplit
+
 from leitor_universal import ler_rastreamento
 from adaptador_compatibilidade import AdaptadorParaRastreamento
-# ========================================================
 
 from dotenv import load_dotenv
 
+import seguranca
 from veiculos_service import VeiculosService
 
 # Lock para proteger o cache em memória de POIs/regras contra condições de corrida
@@ -55,7 +56,6 @@ except ImportError:  # pragma: no cover
 # 3. Módulos do sistema (agora seguros, com a chave do Gemini já carregada)
 from analisador_rastreio import RastreamentoAnalyzer
 from dispositivos_service import normalizar_payload_dispositivo
-from veiculos_service import VeiculosService
 try:
     from agente_refinamento import agente_ia
 except (ImportError, Exception) as e:
@@ -71,14 +71,31 @@ def _template_folder() -> str:
     return "templates"
 
 
-app = Flask(__name__, template_folder=_template_folder())
-app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
-
-
 def _persistent_data_dir() -> str:
+    """Diretório onde ficam o banco, a chave secreta e a senha inicial.
+    Pode ser sobrescrito com RASTREIO_DATA_DIR (útil em testes e servidores)."""
+    customizado = os.environ.get("RASTREIO_DATA_DIR")
+    if customizado:
+        os.makedirs(customizado, exist_ok=True)
+        return customizado
     if getattr(sys, "frozen", False):
         return os.path.dirname(os.path.abspath(sys.executable))
     return os.path.dirname(os.path.abspath(__file__))
+
+
+app = Flask(__name__, template_folder=_template_folder())
+app.secret_key = seguranca.carregar_secret_key(_persistent_data_dir())
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    CSRF_ENABLED=True,
+)
+
+# Senha padrão antiga, que ficou pública no README/código. Usuários que ainda a
+# usam são obrigados a trocá-la no próximo login.
+_SENHA_PADRAO_LEGADA = "Victor2005@"
+_ARQUIVO_SENHA_INICIAL = "senha_inicial_admin.txt"
+_LIMITADOR_LOGIN = seguranca.LimitadorTentativas(max_falhas=5, janela_seg=900)
 
 def _get_db_connection():
     db_path = os.path.join(_persistent_data_dir(), "poi_store.db")
@@ -142,17 +159,63 @@ def _init_poi_db() -> None:
             )
             """
         )
-        usuario_inicial = conn.execute(
-            "SELECT id FROM usuarios WHERE nome = ? COLLATE NOCASE", ("Victor",)
-        ).fetchone()
-        if usuario_inicial is None:
-            conn.execute(
-                "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios) VALUES (?, ?, ?, 1)",
-                (uuid.uuid4().hex, "Victor", generate_password_hash("Victor2005@")),
-            )
+        colunas_usuarios = {row[1] for row in conn.execute("PRAGMA table_info(usuarios)").fetchall()}
+        if "deve_trocar_senha" not in colunas_usuarios:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN deve_trocar_senha INTEGER NOT NULL DEFAULT 0")
+
+        _criar_admin_inicial_se_necessario(conn)
+        _forcar_troca_de_senha_padrao_legada(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _criar_admin_inicial_se_necessario(conn: sqlite3.Connection) -> None:
+    """Cria o primeiro administrador apenas quando não existe nenhum usuário.
+    Nome e senha vêm de ADMIN_INICIAL_USUARIO / ADMIN_INICIAL_SENHA; sem senha
+    definida, uma senha aleatória é gerada, exibida no console e gravada em
+    `senha_inicial_admin.txt`. A troca é obrigatória no primeiro login."""
+    existe_usuario = conn.execute("SELECT 1 FROM usuarios LIMIT 1").fetchone()
+    if existe_usuario:
+        return
+
+    nome = os.environ.get("ADMIN_INICIAL_USUARIO", "").strip() or "admin"
+    senha = os.environ.get("ADMIN_INICIAL_SENHA", "")
+    senha_gerada = not senha
+    if senha_gerada:
+        senha = seguranca.gerar_senha_temporaria()
+
+    conn.execute(
+        "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios, deve_trocar_senha) VALUES (?, ?, ?, 1, 1)",
+        (uuid.uuid4().hex, nome, generate_password_hash(senha)),
+    )
+
+    if senha_gerada:
+        caminho = os.path.join(_persistent_data_dir(), _ARQUIVO_SENHA_INICIAL)
+        fd = os.open(caminho, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(f"Usuario: {nome}\nSenha temporaria: {senha}\n")
+        print(
+            "\n" + "=" * 60 +
+            f"\n  Usuário administrador criado: {nome}"
+            f"\n  Senha temporária: {senha}"
+            f"\n  (também salva em {caminho})"
+            "\n  Troque a senha no primeiro acesso."
+            "\n" + "=" * 60 + "\n"
+        )
+
+
+def _forcar_troca_de_senha_padrao_legada(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        "SELECT id, senha_hash FROM usuarios WHERE deve_trocar_senha = 0 AND ativo = 1"
+    ).fetchall()
+    for row in rows:
+        try:
+            usa_padrao = check_password_hash(row["senha_hash"], _SENHA_PADRAO_LEGADA)
+        except (ValueError, TypeError):
+            usa_padrao = False
+        if usa_padrao:
+            conn.execute("UPDATE usuarios SET deve_trocar_senha = 1 WHERE id = ?", (row["id"],))
 
 
 _init_poi_db()
@@ -165,7 +228,7 @@ def _usuario_atual() -> dict[str, Any] | None:
     conn = _get_db_connection()
     try:
         row = conn.execute(
-            "SELECT id, nome, pode_cadastrar_usuarios FROM usuarios WHERE id = ? AND ativo = 1",
+            "SELECT id, nome, pode_cadastrar_usuarios, deve_trocar_senha FROM usuarios WHERE id = ? AND ativo = 1",
             (usuario_id,),
         ).fetchone()
     finally:
@@ -176,11 +239,62 @@ def _usuario_atual() -> dict[str, Any] | None:
 def _login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if _usuario_atual() is None:
+        usuario = _usuario_atual()
+        if usuario is None:
             return redirect(url_for("login", proxima=request.path))
+        if usuario.get("deve_trocar_senha") and request.endpoint != "trocar_senha":
+            flash("Defina uma nova senha para continuar.", "warning")
+            return redirect(url_for("trocar_senha"))
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def _api_auth_required(view):
+    """APIs aceitam um token (variável API_TOKEN, enviado em
+    `Authorization: Bearer <token>` ou `X-API-Key`) ou um usuário logado."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if seguranca.token_api_valido(request.headers) or _usuario_atual() is not None:
+            return view(*args, **kwargs)
+        return {"ok": False, "erro": "Não autorizado."}, 401
+
+    return wrapped
+
+
+@app.before_request
+def _verificar_csrf():
+    if not app.config.get("CSRF_ENABLED", True):
+        return None
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    if request.path.startswith("/api/"):
+        return None  # APIs usam token próprio, não cookies de formulário
+    token = request.form.get(seguranca.CSRF_FORM_FIELD) or request.headers.get(seguranca.CSRF_HEADER)
+    if seguranca.csrf_valido(session, token):
+        return None
+    flash("Sua sessão expirou ou o formulário é inválido. Tente novamente.", "warning")
+    destino = seguranca.destino_seguro(_caminho_local(request.referrer), url_for("index"))
+    return redirect(destino, 303)
+
+
+def _caminho_local(url: str | None) -> str | None:
+    """Converte uma URL absoluta do próprio host em caminho relativo."""
+    if not url:
+        return None
+    partes = urlsplit(url)
+    if partes.netloc and partes.netloc != request.host:
+        return None
+    caminho = partes.path or "/"
+    return f"{caminho}?{partes.query}" if partes.query else caminho
+
+
+@app.context_processor
+def _inject_csrf():
+    return {
+        "csrf_token": lambda: seguranca.obter_csrf_token(session),
+        "csrf_input": lambda: seguranca.csrf_input_html(session),
+    }
 
 
 def _usuarios_required(view):
@@ -198,12 +312,19 @@ def _usuarios_required(view):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    destino = seguranca.destino_seguro(request.args.get("proxima"), url_for("index"))
     if _usuario_atual() is not None:
-        return redirect(request.args.get("proxima") or url_for("index"))
+        return redirect(destino)
 
     if request.method == "POST":
         nome = request.form.get("nome", "").strip()
         senha = request.form.get("senha", "")
+        chave_limite = f"{request.remote_addr}|{nome.lower()}"
+
+        if _LIMITADOR_LOGIN.bloqueado(chave_limite):
+            flash("Muitas tentativas de login. Aguarde 15 minutos e tente novamente.", "danger")
+            return render_template("login.html"), 429
+
         conn = _get_db_connection()
         try:
             usuario = conn.execute(
@@ -214,9 +335,11 @@ def login():
             conn.close()
 
         if usuario and check_password_hash(usuario["senha_hash"], senha):
+            _LIMITADOR_LOGIN.limpar(chave_limite)
             session.clear()
             session["usuario_id"] = usuario["id"]
-            return redirect(request.args.get("proxima") or url_for("index"))
+            return redirect(destino)
+        _LIMITADOR_LOGIN.registrar_falha(chave_limite)
         flash("Nome ou senha inválidos.", "danger")
 
     return render_template("login.html")
@@ -224,8 +347,59 @@ def login():
 
 @app.route("/logout")
 def logout():
+    _cleanup_cached_file(incluir_auditoria=True)
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/trocar_senha", methods=["GET", "POST"])
+@_login_required
+def trocar_senha():
+    usuario = _usuario_atual()
+    assert usuario is not None
+    obrigatoria = bool(usuario.get("deve_trocar_senha"))
+
+    if request.method == "POST":
+        senha_atual = request.form.get("senha_atual", "")
+        nova_senha = request.form.get("nova_senha", "")
+        confirmacao = request.form.get("confirmacao", "")
+
+        conn = _get_db_connection()
+        try:
+            row = conn.execute("SELECT senha_hash FROM usuarios WHERE id = ?", (usuario["id"],)).fetchone()
+            erro = None
+            if row is None or not check_password_hash(row["senha_hash"], senha_atual):
+                erro = "Senha atual incorreta."
+            elif nova_senha == senha_atual:
+                erro = "A nova senha deve ser diferente da atual."
+            elif nova_senha == _SENHA_PADRAO_LEGADA:
+                erro = "Essa senha é pública e não pode ser usada."
+            else:
+                erro = seguranca.validar_nova_senha(nova_senha, confirmacao)
+
+            if erro:
+                flash(erro, "danger")
+            else:
+                conn.execute(
+                    "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0 WHERE id = ?",
+                    (generate_password_hash(nova_senha), usuario["id"]),
+                )
+                conn.commit()
+                _remover_arquivo_senha_inicial()
+                flash("Senha alterada com sucesso.", "success")
+                return redirect(url_for("index"))
+        finally:
+            conn.close()
+
+    return render_template("trocar_senha.html", obrigatoria=obrigatoria)
+
+
+def _remover_arquivo_senha_inicial() -> None:
+    caminho = os.path.join(_persistent_data_dir(), _ARQUIVO_SENHA_INICIAL)
+    try:
+        os.unlink(caminho)
+    except OSError:
+        pass
 
 
 def _get_regras_ativas() -> list[dict[str, Any]]:
@@ -588,14 +762,32 @@ def _parse_poi_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
     return pois # type: ignore
 
 
-def _cleanup_cached_file() -> None:
-    file_path = session.pop("uploaded_file_path", None)
-    session.pop("uploaded_file_name", None)
-    if file_path and os.path.exists(file_path):
-        try:
-            os.unlink(file_path)
-        except OSError:
-            pass
+def _remover_temporario(caminho: str | None) -> None:
+    """Remove um arquivo temporário de upload, ignorando se já não existir.
+    Só apaga arquivos dentro do diretório temporário do sistema."""
+    if not caminho:
+        return
+    tmp_dir = os.path.realpath(tempfile.gettempdir())
+    real = os.path.realpath(caminho)
+    if os.path.commonpath([tmp_dir, real]) != tmp_dir:
+        return
+    try:
+        os.unlink(real)
+    except OSError:
+        pass
+
+
+def _cleanup_cached_file(incluir_auditoria: bool = False) -> None:
+    """Apaga o upload temporário da análise (e, se pedido, os da auditoria)."""
+    chaves = [("uploaded_file_path", "uploaded_file_name")]
+    if incluir_auditoria:
+        chaves += [
+            ("auditoria_carregamento_path", "auditoria_carregamento_nome"),
+            ("auditoria_rastreio_path", "auditoria_rastreio_nome"),
+        ]
+    for chave_caminho, chave_nome in chaves:
+        _remover_temporario(session.pop(chave_caminho, None))
+        session.pop(chave_nome, None)
 
 
 def _format_duration(seconds: int) -> str:
@@ -621,15 +813,83 @@ def _haversine_metros(lat1: float, lon1: float, lat2: float, lon2: float) -> flo
     return r * (2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a)))
 
 
+_TAMANHO_BLOCO_DISTANCIAS = 256
+
+
+def _pontos_dentro_de_algum_poi(
+    lats: np.ndarray,
+    lons: np.ndarray,
+    pois_lista: list[dict[str, object]],
+    raio_tolerancia_m: float,
+) -> np.ndarray | None:
+    """Retorna, para cada ponto, se ele está dentro do raio de ao menos um POI.
+
+    A matriz pontos × POIs é calculada em blocos de pontos: com ~17 mil POIs,
+    a versão anterior alocava várias matrizes N×17000 de uma vez e podia
+    passar de 1 GB de RAM em planilhas grandes. Cada bloco também descarta,
+    por uma caixa de latitude, os POIs que não têm como estar no raio.
+    Retorna None se não houver POI com coordenadas válidas."""
+    poi_lat: list[float] = []
+    poi_lon: list[float] = []
+    poi_raio: list[float] = []
+    for p in pois_lista:
+        try:
+            plat = float(str(p.get("latitude")).replace(",", "."))
+            plon = float(str(p.get("longitude")).replace(",", "."))
+            praio = float(str(p.get("raio_metros", 200.0)).replace(",", "."))
+        except (ValueError, TypeError):
+            continue
+        if math.isnan(plat) or math.isnan(plon):
+            continue
+        poi_lat.append(plat)
+        poi_lon.append(plon)
+        poi_raio.append(max(praio, float(raio_tolerancia_m)))
+
+    if not poi_lat:
+        return None
+
+    poi_lat_deg = np.array(poi_lat)
+    poi_lat_rad = np.radians(poi_lat_deg)
+    poi_lon_rad = np.radians(np.array(poi_lon))
+    raios = np.array(poi_raio)
+    # 1 grau de latitude ≈ 111 km; margem em graus para o maior raio cadastrado.
+    margem_lat = float(raios.max()) / 111_000.0 + 1e-6
+
+    resultado = np.zeros(len(lats), dtype=bool)
+    validos = ~(np.isnan(lats) | np.isnan(lons))
+    indices_validos = np.flatnonzero(validos)
+
+    for inicio in range(0, len(indices_validos), _TAMANHO_BLOCO_DISTANCIAS):
+        idx = indices_validos[inicio:inicio + _TAMANHO_BLOCO_DISTANCIAS]
+        bloco_lat = lats[idx]
+        candidatos = (poi_lat_deg >= bloco_lat.min() - margem_lat) & (poi_lat_deg <= bloco_lat.max() + margem_lat)
+        if not candidatos.any():
+            continue
+
+        c_lat = poi_lat_rad[candidatos][None, :]
+        c_lon = poi_lon_rad[candidatos][None, :]
+        c_raio = raios[candidatos][None, :]
+        r_lat = np.radians(bloco_lat)[:, None]
+        r_lon = np.radians(lons[idx])[:, None]
+
+        a = np.sin((c_lat - r_lat) / 2.0) ** 2 + np.cos(r_lat) * np.cos(c_lat) * np.sin((c_lon - r_lon) / 2.0) ** 2
+        dist = 6371000.0 * 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
+        resultado[idx] = np.any(dist <= c_raio, axis=1)
+
+    return resultado
+
+
 def _find_missing_poi_rows(
     df: pd.DataFrame, 
     raio_tolerancia_m: float = 200.0, 
     nomes_pois_registrados: set[str] | None = None,
     pois_lista: list[dict[str, object]] | None = None
 ) -> tuple[list[dict[str, object]], list[str]]:
+    # Resolve as colunas já no DataFrame normalizado, onde elas serão usadas.
+    working = _normalize_columns(df.copy())
     try:
-        timestamp_col = _resolver_coluna(df, ["timestamp", "data_hora", "datetime", "date_time", "horario", "data"])
-        speed_col = _resolver_coluna(df, ["velocidade_kmh", "speed_kmh", "velocidade", "speed"])
+        timestamp_col = _resolver_coluna(working, ["timestamp", "data_hora", "datetime", "date_time", "horario", "data"])
+        speed_col = _resolver_coluna(working, ["velocidade_kmh", "speed_kmh", "velocidade", "speed"])
     except ValueError:
         return [], []
 
@@ -637,19 +897,18 @@ def _find_missing_poi_rows(
     lon_col = None
     for alias in ["latitude", "lat"]:
         try:
-            lat_col = _resolver_coluna(df, [alias])
+            lat_col = _resolver_coluna(working, [alias])
             break
         except ValueError:
             continue
 
     for alias in ["longitude", "lon", "lng"]:
         try:
-            lon_col = _resolver_coluna(df, [alias])
+            lon_col = _resolver_coluna(working, [alias])
             break
         except ValueError:
             continue
 
-    working = _normalize_columns(df.copy())
     working[timestamp_col] = pd.to_datetime(working[timestamp_col], dayfirst=True, format="mixed", errors="coerce")
     working[speed_col] = _parse_velocidade_series(working[speed_col]).fillna(9999)
 
@@ -657,55 +916,29 @@ def _find_missing_poi_rows(
     if parados.empty:
         return [], []
 
-    if pois_lista and lat_col and lon_col and not parados.empty:
-        lats_p = pd.to_numeric(parados[lat_col].astype(str).str.replace(",", "."), errors="coerce").values
-        lons_p = pd.to_numeric(parados[lon_col].astype(str).str.replace(",", "."), errors="coerce").values
+    # Uma parada só é "não cadastrada" se nenhuma fonte de informação a explica:
+    # (a) a coluna de POI da própria planilha está vazia (quando existe) e
+    # (b) o ponto está fora do raio de todos os POIs cadastrados (quando há base).
+    mascara_suspeita = np.ones(len(parados), dtype=bool)
 
-        poi_coords = []
-        poi_raios = []
-        for p in pois_lista:
-            try:
-                plat = float(str(p.get("latitude")).replace(",", "."))
-                plon = float(str(p.get("longitude")).replace(",", "."))
-                praio = float(str(p.get("raio_metros", 200.0)).replace(",", "."))
-                poi_coords.append((plat, plon))
-                poi_raios.append(max(praio, float(raio_tolerancia_m)))
-            except (ValueError, TypeError):
-                continue
+    # Busca exata: a busca por substring confundiria "local" com "localizacao"
+    # (endereço, sempre preenchido) e "poi" com "poi_distancia".
+    poi_col = next(
+        (c for c in ["poi", "ponto_de_interesse", "local", "location"] if c in working.columns),
+        None,
+    )
+    if poi_col:
+        sem_poi = parados[poi_col].isna() | parados[poi_col].astype(str).str.strip().eq("")
+        mascara_suspeita &= sem_poi.to_numpy()
 
-        if poi_coords:
-            poi_arr = np.radians(np.array(poi_coords))
-            raios_arr = np.array(poi_raios)
+    if pois_lista and lat_col and lon_col:
+        lats_p = pd.to_numeric(parados[lat_col].astype(str).str.replace(",", "."), errors="coerce").to_numpy()
+        lons_p = pd.to_numeric(parados[lon_col].astype(str).str.replace(",", "."), errors="coerce").to_numpy()
+        perto_de_poi = _pontos_dentro_de_algum_poi(lats_p, lons_p, pois_lista, raio_tolerancia_m)
+        if perto_de_poi is not None:
+            mascara_suspeita &= ~perto_de_poi
 
-            rad_lats = np.radians(lats_p)[:, None]
-            rad_lons = np.radians(lons_p)[:, None]
-            poi_lats = poi_arr[:, 0][None, :]
-            poi_lons = poi_arr[:, 1][None, :]
-
-            dlat = poi_lats - rad_lats
-            dlon = poi_lons - rad_lons
-            a = np.sin(dlat / 2.0)**2 + np.cos(rad_lats) * np.cos(poi_lats) * np.sin(dlon / 2.0)**2
-            c = 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a))
-            dist_metros = 6371000.0 * c
-
-            is_longe = ~np.any(dist_metros <= raios_arr[None, :], axis=1)
-            missing = parados[is_longe].copy()
-        else:
-            missing = parados.copy()
-    else:
-        poi_col = None
-        for alias in ["poi", "local", "location", "ponto_de_interesse"]:
-            try:
-                poi_col = _resolver_coluna(df, [alias])
-                break
-            except ValueError:
-                continue
-
-        if poi_col:
-            sem_poi = parados[poi_col].isna() | parados[poi_col].astype(str).str.strip().eq("")
-            missing = parados[sem_poi].copy()
-        else:
-            missing = parados.copy()
+    missing = parados[mascara_suspeita].copy()
 
     missing = missing.sort_values(timestamp_col).reset_index(drop=True)
     if missing.empty:
@@ -809,7 +1042,7 @@ def _gerar_timeline_viagem(df: pd.DataFrame, placa: str, pois: list[dict[str, ob
     eventos = list(analyzer.gerar_eventos_viagem(subset, limite_velocidade_kmh))
 
     nomes_pois_registrados = {_normalize_column_name(str(p["nome"])) for p in pois if p.get("nome")}
-    missing_rows, _ = _find_missing_poi_rows(subset, raio_tolerancia_m, nomes_pois_registrados)
+    missing_rows, _ = _find_missing_poi_rows(subset, raio_tolerancia_m, nomes_pois_registrados, pois)
     for row in missing_rows:
         eventos.append(
             {
@@ -1057,13 +1290,18 @@ def configuracoes():
             nome = request.form.get("nome", "").strip()
             senha = request.form.get("senha", "")
             pode_cadastrar = 1 if request.form.get("pode_cadastrar_usuarios") == "1" else 0
+            erro_senha = seguranca.validar_nova_senha(senha) if senha else None
             if not nome or not senha:
                 flash("Informe nome e senha para cadastrar o usuário.", "warning")
+            elif erro_senha:
+                flash(erro_senha, "warning")
             else:
                 conn = _get_db_connection()
                 try:
+                    # Senha definida pelo administrador é provisória: o usuário
+                    # escolhe a própria no primeiro acesso.
                     conn.execute(
-                        "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios) VALUES (?, ?, ?, ?)",
+                        "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios, deve_trocar_senha) VALUES (?, ?, ?, ?, 1)",
                         (uuid.uuid4().hex, nome, generate_password_hash(senha), pode_cadastrar),
                     )
                     conn.commit()
@@ -1085,6 +1323,44 @@ def configuracoes():
                     )
                     conn.commit()
                     flash("Permissão de cadastro atualizada.", "success")
+                finally:
+                    conn.close()
+        elif acao == "alternar_ativo":
+            usuario_id = request.form.get("usuario_id", "")
+            if usuario_id == usuario["id"]:
+                flash("Você não pode desativar o seu próprio perfil.", "warning")
+            else:
+                conn = _get_db_connection()
+                try:
+                    conn.execute(
+                        "UPDATE usuarios SET ativo = CASE ativo WHEN 1 THEN 0 ELSE 1 END WHERE id = ?",
+                        (usuario_id,),
+                    )
+                    conn.commit()
+                    flash("Situação do usuário atualizada.", "success")
+                finally:
+                    conn.close()
+        elif acao == "redefinir_senha":
+            usuario_id = request.form.get("usuario_id", "")
+            if usuario_id == usuario["id"]:
+                flash("Use a opção 'Trocar minha senha' para alterar a sua.", "warning")
+            else:
+                senha_temporaria = seguranca.gerar_senha_temporaria()
+                conn = _get_db_connection()
+                try:
+                    cursor = conn.execute(
+                        "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1 WHERE id = ?",
+                        (generate_password_hash(senha_temporaria), usuario_id),
+                    )
+                    conn.commit()
+                    if cursor.rowcount:
+                        flash(
+                            f"Senha temporária: {senha_temporaria} — repasse ao usuário; "
+                            "ele deverá trocá-la no próximo acesso.",
+                            "success",
+                        )
+                    else:
+                        flash("Usuário não encontrado.", "warning")
                 finally:
                     conn.close()
         return redirect(url_for("configuracoes"))
@@ -1174,8 +1450,6 @@ def index():
         raio_suspeita = 200.0
 
     action = request.form.get("action", "analyze")
-    missing_rows: list[dict[str, object]] = []
-    missing_columns: list[str] = []
     placas: list[str] = []
     resumo_geral = None
     posicoes_placas: dict[str, tuple[float, float]] = {}
@@ -1200,10 +1474,6 @@ def index():
             placas = sorted(df_full[placa_col].dropna().astype(str).unique().tolist())
             if not placa_escolhida and placas:
                 placa_escolhida = placas[0]
-
-            df_placa = df_full[df_full[placa_col].astype(str) == placa_escolhida] if placa_escolhida else df_full
-            missing_rows, missing_columns = _find_missing_poi_rows(df_placa, raio_suspeita, nomes_pois_registrados)
-            paradas_suspeitas = _find_suspicious_stops(df_placa, raio_suspeita, nomes_pois_registrados)
         except Exception:
             _cleanup_cached_file()
             uploaded_file_path = None
@@ -1313,7 +1583,7 @@ def index():
                 relatorio_bruto = analyzer.gerar_relatorio(df_placa)
                 report = agente_ia.refinar_relatorio(relatorio_bruto, regras_ativas) if agente_ia else relatorio_bruto
 
-            paradas_suspeitas = _find_suspicious_stops(df_placa, raio_suspeita, nomes_pois_registrados)
+            paradas_suspeitas = _find_suspicious_stops(df_placa, raio_suspeita, nomes_pois_registrados, pois_ajustados)
         except Exception as error:
             flash(str(error), "danger")
 
@@ -1334,11 +1604,11 @@ def index():
     return render_template(
         "index.html",
         report=report,
-        placa_escolhida="",
+        placa_escolhida=placa_escolhida,
         raio_suspeita=raio_suspeita,
         paradas_suspeitas=paradas_suspeitas,
         timeline_eventos=timeline_eventos,
-        placas=[],
+        placas=placas,
         file_name=file_name,
         resumo_geral=resumo_geral,
         posicoes_placas=posicoes_placas,
@@ -1393,12 +1663,14 @@ def auditoria_roteiro_view():
 
         try:
             if arquivo_carregamento and arquivo_carregamento.filename:
+                _remover_temporario(caminho_carregamento)
                 caminho_carregamento = _save_uploaded_file(arquivo_carregamento)
                 session["auditoria_carregamento_path"] = caminho_carregamento
                 session["auditoria_carregamento_nome"] = arquivo_carregamento.filename
                 file_name_carregamento = arquivo_carregamento.filename
 
             if arquivo_rastreio and arquivo_rastreio.filename:
+                _remover_temporario(caminho_rastreio)
                 caminho_rastreio = _save_uploaded_file(arquivo_rastreio)
                 session["auditoria_rastreio_path"] = caminho_rastreio
                 session["auditoria_rastreio_nome"] = arquivo_rastreio.filename
@@ -1473,54 +1745,42 @@ def upload_rastreamento():
     """
     arquivo = request.files.get("arquivo")
     nome_fonte = request.form.get("nome_fonte", "GENERICA")
-    
-    if not arquivo:
+
+    if not arquivo or not arquivo.filename:
         flash("Selecione um arquivo", "warning")
         return redirect("/")
-    
+
+    caminho_temp: str | None = None
     try:
-        # 1. Salvar arquivo temporário
         caminho_temp = _save_uploaded_file(arquivo)
-        
-        # 2. Ler com novo sistema
         eventos, stats = ler_rastreamento(caminho_temp, nome_fonte)
-        
-        # 3. Converter para DataFrame (compatível com sistema antigo)
         df = AdaptadorParaRastreamento.eventos_para_dataframe(eventos)
-        
-        # 4. Guardar na sessão
-        session["df_rastreamento"] = df.to_json()
-        session["stats_rastreamento"] = stats
-        session["fonte_rastreamento"] = nome_fonte
-        
-        # 5. Mostrar resultado
-        flash(
-            f"✅ {stats['eventos_validos']} eventos válidos de {nome_fonte}",
-            "success"
-        )
-        
+
+        # O DataFrame vai para um CSV temporário no servidor; a sessão (que é
+        # um cookie limitado a ~4 KB) guarda apenas o caminho. Assim o arquivo
+        # convertido segue o mesmo fluxo de análise de um upload comum.
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+        tmp.close()
+        df.to_csv(tmp.name, index=False)
+        _cleanup_cached_file()
+        session["uploaded_file_path"] = tmp.name
+        session["uploaded_file_name"] = f"{arquivo.filename} ({nome_fonte})"
+        session["stats_rastreamento"] = {
+            k: v for k, v in stats.items() if isinstance(v, (int, float, str, bool))
+        }
+
+        flash(f"✅ {stats.get('eventos_validos', len(df))} eventos válidos de {nome_fonte}", "success")
     except Exception as e:
         flash(f"❌ Erro: {str(e)}", "danger")
     finally:
-        # Limpar arquivo temporário
-        if os.path.exists(caminho_temp):
+        if caminho_temp and os.path.exists(caminho_temp):
             os.unlink(caminho_temp)
-    
-    return redirect("/")
 
-# ============================================================
+    return redirect("/")
 
 def _registrar_dispositivo_recebido(payload: dict[str, Any]) -> dict[str, Any]:
     normalizado = normalizar_payload_dispositivo(payload)
     veiculo = _VEICULOS_SERVICE.registrar_ou_atualizar(payload)
-
-    recentes = session.get("dispositivos_recentes", [])
-    recentes.insert(0, {
-        **normalizado,
-        "veiculo_id": veiculo["veiculo_id"],
-    })
-    session["dispositivos_recentes"] = recentes[:20]
-    session.modified = True
     return {
         **normalizado,
         "veiculo_id": veiculo["veiculo_id"],
@@ -1529,6 +1789,7 @@ def _registrar_dispositivo_recebido(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.route("/api/dispositivos/receber", methods=["POST"])
+@_api_auth_required
 def api_receber_dispositivo():
     try:
         payload = request.get_json(silent=True)
@@ -1551,14 +1812,50 @@ def api_receber_dispositivo():
 
 
 @app.route("/api/dispositivos/recentes", methods=["GET"])
+@_api_auth_required
 def api_dispositivos_recentes():
-    recentes = session.get("dispositivos_recentes", [])
-    return {"ok": True, "dados": recentes}, 200
+    return {"ok": True, "dados": _VEICULOS_SERVICE.listar_recentes()}, 200
+
+
+@app.route("/api/pois", methods=["GET"])
+@_api_auth_required
+def api_pois():
+    """Busca paginada na base de POIs. Substitui a renderização dos ~17 mil
+    POIs direto no HTML da página inicial (que gerava ~10 MB por acesso)."""
+    termo = _normalizar_busca(request.args.get("q", ""))
+    try:
+        limite = max(1, min(int(request.args.get("limite", 200)), 1000))
+        deslocamento = max(0, int(request.args.get("deslocamento", 0)))
+    except ValueError:
+        return {"ok": False, "erro": "Parâmetros de paginação inválidos."}, 400
+
+    pois = _get_saved_pois()
+    if termo:
+        pois = [
+            p for p in pois
+            if termo in _normalizar_busca(f"{p.get('nome', '')} {p.get('cidade', '')} {p.get('tipo', '')}")
+        ]
+
+    campos = ("id", "nome", "tipo", "cidade", "estado", "latitude", "longitude", "raio_metros")
+    pagina = [{k: p.get(k) for k in campos} for p in pois[deslocamento:deslocamento + limite]]
+    return {"ok": True, "total": len(pois), "dados": pagina}, 200
+
+
+def _normalizar_busca(texto: Any) -> str:
+    texto = unicodedata.normalize("NFKD", str(texto or "").lower())
+    return "".join(ch for ch in texto if not unicodedata.combining(ch)).strip()
 
 
 @app.route("/api/veiculos", methods=["GET"])
+@_api_auth_required
 def api_veiculos():
     return {"ok": True, "dados": _VEICULOS_SERVICE.listar_veiculos()}, 200
+
+
+def _server_host() -> str:
+    """Por padrão o servidor só aceita conexões desta máquina. Para liberar o
+    acesso pela rede local, defina HOST=0.0.0.0 no .env."""
+    return os.environ.get("HOST", "127.0.0.1").strip() or "127.0.0.1"
 
 
 def _find_available_port(initial_port: int = 5000) -> int:
@@ -1566,7 +1863,7 @@ def _find_available_port(initial_port: int = 5000) -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         while True:
             try:
-                sock.bind(("0.0.0.0", port))
+                sock.bind((_server_host(), port))
                 return port
             except OSError:
                 port += 1
@@ -1575,7 +1872,7 @@ def _find_available_port(initial_port: int = 5000) -> int:
 def _is_port_available(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
-            sock.bind(("0.0.0.0", port))
+            sock.bind((_server_host(), port))
             return True
         except OSError:
             return False
@@ -1615,11 +1912,12 @@ def _open_browser(port: int) -> None:
 
 if __name__ == "__main__":
     port = _get_server_port(5000)
-    print(f"Iniciando a aplicação na porta {port}...")
+    host = _server_host()
+    print(f"Iniciando a aplicação em http://{host}:{port}/ ...")
     _open_browser(port)
 
     app.run(
-        host="0.0.0.0",
+        host=host,
         port=port,
         debug=False,
         use_reloader=False,

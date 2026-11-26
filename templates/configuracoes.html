@@ -28,6 +28,7 @@
     <a href="/auditoria_roteiro">Auditoria de roteiro</a>
     <a href="/configuracoes" class="active" aria-label="Configurações" title="Configurações">&#9881;</a>
   </nav>
+  <a class="logout" href="/trocar_senha">Trocar minha senha</a>
   <a class="logout" href="/logout">Sair de {{ usuario_atual.nome }}</a>
 </aside>
 <main>
@@ -36,7 +37,7 @@
   <div class="grid">
     <section>
       <h3>Base de POIs</h3><p class="hint">Importe ou substitua a base de pontos de interesse usada nas análises.</p>
-      <form class="upload" method="post" action="/">
+      <form class="upload" method="post" action="/">{{ csrf_input() }}
         <input type="hidden" name="action" value="import_pois">
         <input type="file" name="arquivo_pois" accept=".csv,.xls,.xlsx" required>
         <button type="submit">Importar base</button>
@@ -48,25 +49,25 @@
     </section>
     <section>
       <h3>Regras de IA</h3><p class="hint">Instruções aplicadas ao refinamento dos relatórios.</p>
-      <form method="post" action="/adicionar_regra_feedback">
+      <form method="post" action="/adicionar_regra_feedback">{{ csrf_input() }}
         <label for="categoria">Categoria</label><input id="categoria" name="categoria" value="GERAL">
         <label for="descricao_regra">Instrução</label><input id="descricao_regra" name="descricao_regra" placeholder="Ex: padronize os nomes dos locais" required>
         <button type="submit">Adicionar regra</button>
       </form>
       <div class="count">{{ regras_salvas|length if regras_salvas else 0 }} regra(s) ativa(s)</div>
-      {% if regras_salvas %}<table><thead><tr><th>Categoria</th><th>Descrição</th><th></th></tr></thead><tbody>{% for regra in regras_salvas %}<tr><td>{{ regra.categoria }}</td><td>{{ regra.descricao }}</td><td><form method="post" action="/excluir_regras"><input type="hidden" name="regra_ids" value="{{ regra.id }}"><button class="secondary" type="submit">Excluir</button></form></td></tr>{% endfor %}</tbody></table>{% endif %}
+      {% if regras_salvas %}<table><thead><tr><th>Categoria</th><th>Descrição</th><th></th></tr></thead><tbody>{% for regra in regras_salvas %}<tr><td>{{ regra.categoria }}</td><td>{{ regra.descricao }}</td><td><form method="post" action="/excluir_regras">{{ csrf_input() }}<input type="hidden" name="regra_ids" value="{{ regra.id }}"><button class="secondary" type="submit">Excluir</button></form></td></tr>{% endfor %}</tbody></table>{% endif %}
     </section>
     {% if usuario_atual.pode_cadastrar_usuarios %}
     <section>
       <h3>Usuários e permissões</h3><p class="hint">Somente perfis autorizados podem criar novos acessos e liberar esta área.</p>
-      <form method="post">
+      <form method="post">{{ csrf_input() }}
         <input type="hidden" name="acao" value="criar_usuario">
         <label for="novo_nome">Nome</label><input id="novo_nome" name="nome" required>
-        <label for="nova_senha">Senha</label><input id="nova_senha" name="senha" type="password" required>
+        <label for="nova_senha">Senha</label><input id="nova_senha" name="senha" type="password" minlength="8" required>
         <label><input type="checkbox" name="pode_cadastrar_usuarios" value="1" style="width:auto; margin-right:6px;"> Pode cadastrar usuários</label>
         <button type="submit">Cadastrar usuário</button>
       </form>
-      <table><thead><tr><th>Nome</th><th>Permissão</th><th></th></tr></thead><tbody>{% for usuario in usuarios %}<tr><td>{{ usuario.nome }}</td><td>{{ 'Autorizado' if usuario.pode_cadastrar_usuarios else 'Sem acesso' }}</td><td>{% if usuario.id != usuario_atual.id %}<form method="post"><input type="hidden" name="acao" value="alternar_permissao"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="secondary" type="submit">Alternar</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+      <table><thead><tr><th>Nome</th><th>Permissão</th><th>Situação</th><th></th></tr></thead><tbody>{% for usuario in usuarios %}<tr><td>{{ usuario.nome }}</td><td>{{ 'Autorizado' if usuario.pode_cadastrar_usuarios else 'Sem acesso' }}</td><td>{{ 'Ativo' if usuario.ativo else 'Desativado' }}</td><td>{% if usuario.id != usuario_atual.id %}<form method="post" style="display:inline">{{ csrf_input() }}<input type="hidden" name="acao" value="alternar_permissao"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="secondary" type="submit">Permissão</button></form> <form method="post" style="display:inline">{{ csrf_input() }}<input type="hidden" name="acao" value="alternar_ativo"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="secondary" type="submit">{{ 'Desativar' if usuario.ativo else 'Reativar' }}</button></form> <form method="post" style="display:inline" onsubmit="return confirm('Gerar uma senha temporária para {{ usuario.nome }}?');">{{ csrf_input() }}<input type="hidden" name="acao" value="redefinir_senha"><input type="hidden" name="usuario_id" value="{{ usuario.id }}"><button class="secondary" type="submit">Redefinir senha</button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
     </section>
     {% endif %}
   </div>

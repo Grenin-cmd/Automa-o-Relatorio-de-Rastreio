@@ -160,7 +160,7 @@
     <a class="voltar" href="/logout">Sair de {{ usuario_atual.nome }}</a>
   </div>
 
-  <form method="POST" enctype="multipart/form-data" class="sidebar-body" id="formAuditoria">
+  <form method="POST" enctype="multipart/form-data" class="sidebar-body" id="formAuditoria">{{ csrf_input() }}
 
     <div class="form-group">
       <label>Planilha de Carregamento</label>
