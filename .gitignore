@@ -11,7 +11,8 @@ __pycache__/
 .venv/
 venv/
 
-# Banco SQLite: arquivos auxiliares do modo WAL
+# Banco SQLite (dados e usuários ficam só na máquina, nunca no git)
+poi_store.db
 *.db-wal
 *.db-shm
 
