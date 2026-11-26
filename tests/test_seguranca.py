@@ -7,8 +7,12 @@ import numpy as np
 import pandas as pd
 from werkzeug.security import generate_password_hash
 
+import analise
 import app as app_module
+import banco
+import geo
 import seguranca
+from rotas import comum
 
 
 def _csrf(client, pagina: str = "/login") -> str:
@@ -19,7 +23,7 @@ def _csrf(client, pagina: str = "/login") -> str:
 
 def _criar_usuario(nome: str, senha: str, deve_trocar: int = 0, admin: int = 0) -> str:
     usuario_id = uuid.uuid4().hex
-    conn = app_module._get_db_connection()
+    conn = banco.get_connection()
     try:
         conn.execute(
             "INSERT INTO usuarios (id, nome, senha_hash, pode_cadastrar_usuarios, deve_trocar_senha) VALUES (?, ?, ?, ?, ?)",
@@ -75,15 +79,15 @@ class FuncoesSegurancaTests(unittest.TestCase):
 class AppSegurancaTests(unittest.TestCase):
     def setUp(self):
         app_module.app.config["TESTING"] = True
-        app_module._LIMITADOR_LOGIN._falhas.clear()
+        comum.LIMITADOR_LOGIN._falhas.clear()
         self.client = app_module.app.test_client()
 
     def test_admin_inicial_criado_com_senha_aleatoria_e_troca_obrigatoria(self):
-        caminho = os.path.join(os.environ["RASTREIO_DATA_DIR"], app_module._ARQUIVO_SENHA_INICIAL)
+        caminho = os.path.join(os.environ["RASTREIO_DATA_DIR"], banco.ARQUIVO_SENHA_INICIAL)
         with open(caminho, encoding="utf-8") as fh:
             conteudo = fh.read()
         senha = re.search(r"Senha temporaria: (\S+)", conteudo).group(1)
-        self.assertNotEqual(senha, app_module._SENHA_PADRAO_LEGADA)
+        self.assertNotEqual(senha, banco.SENHA_PADRAO_LEGADA)
 
         resp = _login(self.client, "admin", senha)
         self.assertEqual(resp.status_code, 302)
@@ -123,10 +127,10 @@ class AppSegurancaTests(unittest.TestCase):
         self.assertEqual(self.client.get("/configuracoes").status_code, 200)
 
     def test_senha_padrao_legada_obriga_troca(self):
-        usuario_id = _criar_usuario("legado", app_module._SENHA_PADRAO_LEGADA)
-        conn = app_module._get_db_connection()
+        usuario_id = _criar_usuario("legado", banco.SENHA_PADRAO_LEGADA)
+        conn = banco.get_connection()
         try:
-            app_module._forcar_troca_de_senha_padrao_legada(conn)
+            banco.forcar_troca_de_senha_padrao_legada(conn)
             conn.commit()
             row = conn.execute("SELECT deve_trocar_senha FROM usuarios WHERE id = ?", (usuario_id,)).fetchone()
         finally:
@@ -152,7 +156,7 @@ class AppSegurancaTests(unittest.TestCase):
 
 class ApiPoisTests(unittest.TestCase):
     def test_busca_paginada_de_pois(self):
-        app_module._save_saved_pois([
+        banco.save_saved_pois([
             {"id": f"id{i}", "nome": f"Posto São João {i}", "tipo": "posto", "latitude": -23.0, "longitude": -46.0,
              "cidade": "Campinas", "estado": "SP", "rodovia": "", "raio_metros": 200.0,
              "tempo_parado_seg": 120, "velocidade_maxima_kmh": 10.0}
@@ -191,12 +195,12 @@ class ParadasSuspeitasTests(unittest.TestCase):
     def test_parada_dentro_de_poi_cadastrado_nao_e_suspeita(self):
         pois = [{"nome": "Cliente", "latitude": -23.5505, "longitude": -46.6333, "raio_metros": 300}]
         df = self._df_parado(-23.5506, -46.6334)
-        self.assertEqual(app_module._find_suspicious_stops(df, 200.0, None, pois), [])
+        self.assertEqual(analise.find_suspicious_stops(df, 200.0, None, pois), [])
 
     def test_parada_longe_dos_pois_e_suspeita(self):
         pois = [{"nome": "Cliente", "latitude": -23.5505, "longitude": -46.6333, "raio_metros": 300}]
         df = self._df_parado(-22.0, -45.0)
-        self.assertEqual(len(app_module._find_suspicious_stops(df, 200.0, None, pois)), 1)
+        self.assertEqual(len(analise.find_suspicious_stops(df, 200.0, None, pois)), 1)
 
     def test_calculo_em_blocos_igual_ao_calculo_direto(self):
         rng = np.random.default_rng(42)
@@ -206,9 +210,9 @@ class ParadasSuspeitasTests(unittest.TestCase):
             {"latitude": float(a), "longitude": float(b), "raio_metros": 2000}
             for a, b in zip(rng.uniform(-24, -23, 300), rng.uniform(-47, -46, 300))
         ]
-        resultado = app_module._pontos_dentro_de_algum_poi(lats, lons, pois, 200.0)
+        resultado = geo.pontos_dentro_de_algum_poi(lats, lons, pois, 200.0)
         esperado = np.array([
-            any(app_module._haversine_metros(la, lo, p["latitude"], p["longitude"]) <= 2000 for p in pois)
+            any(geo.haversine_metros(la, lo, p["latitude"], p["longitude"]) <= 2000 for p in pois)
             for la, lo in zip(lats, lons)
         ])
         np.testing.assert_array_equal(resultado, esperado)

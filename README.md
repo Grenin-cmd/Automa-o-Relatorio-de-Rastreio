@@ -62,6 +62,23 @@ com nomes como `timestamp`/`data_hora`/`data`, `velocidade_kmh`/`velocidade`,
 - A auditoria de roteiro não exige informar uma placa; quando necessário, ela usa
   todos os registros compatíveis.
 
+## Estrutura do código
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `app.py` | Cria o app Flask, registra as rotas, CSRF e inicia o servidor |
+| `config.py` | Carrega o `.env` e define os diretórios |
+| `banco.py` | SQLite: tabelas, migrações, usuário inicial, POIs e regras |
+| `seguranca.py` | CSRF, limite de login, senhas e token de API |
+| `utils.py` / `geo.py` | Normalização de texto e números; distâncias |
+| `arquivos.py` | Leitura de CSV/Excel e uploads temporários |
+| `analise.py` | Paradas não cadastradas, linha do tempo, resumo geral e Word |
+| `analisador_rastreio.py` | Motor de detecção de entradas/saídas em POIs |
+| `auditoria_roteiro.py` | Auditoria planejado × executado |
+| `leitor_universal.py` | Leitura de arquivos de diferentes fornecedores de rastreio |
+| `agente_refinamento.py` | Refinamento de textos por IA (com regras aplicadas sem IA como reserva) |
+| `rotas/` | Blueprints: `auth`, `analise`, `configuracoes`, `auditoria`, `api` |
+
 ## Testes
 
 ```bash

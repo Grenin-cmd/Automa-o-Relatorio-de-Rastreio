@@ -1,16 +1,21 @@
 import unittest
 
+import pandas as pd
+from flask import render_template
+
+import analise
 import app
+from rotas import comum
 
 
 class AppImportTests(unittest.TestCase):
     def test_app_importa_sem_erro(self):
         self.assertIsNotNone(app.app)
-        self.assertTrue(hasattr(app, "_VEICULOS_SERVICE"))
+        self.assertIsNotNone(comum.VEICULOS_SERVICE)
 
     def test_resumo_renderiza_botao_google_maps_com_coordenadas(self):
         with app.app.test_request_context("/"):
-            html = app.render_template(
+            html = render_template(
                 "index.html",
                 report=None,
                 placa_escolhida="ABC1234",
@@ -28,13 +33,13 @@ class AppImportTests(unittest.TestCase):
         self.assertIn("https://www.google.com/maps/search/?api=1&amp;query=-23.5505,-46.6333", html)
 
     def test_obter_posicoes_placas_aceita_lat_lon_reais(self):
-        df = app.pd.DataFrame({
+        df = pd.DataFrame({
             "Placa": ["ABC1234", "ABC1234"],
             "Latitude": ["-23.5505", "-23.5600"],
             "Longitude": ["-46.6333", "-46.6400"],
         })
 
-        self.assertEqual(app._obter_posicoes_placas(df)["ABC1234"], (-23.56, -46.64))
+        self.assertEqual(analise.obter_posicoes_placas(df)["ABC1234"], (-23.56, -46.64))
 
 
 if __name__ == "__main__":

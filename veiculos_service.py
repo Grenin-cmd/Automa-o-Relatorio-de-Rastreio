@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 from collections import deque
 from copy import deepcopy
-from datetime import datetime
 from typing import Any
 
 from dispositivos_service import normalizar_payload_dispositivo

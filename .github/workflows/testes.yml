@@ -22,5 +22,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Verificar erros de codigo (ruff)
+        run: ruff check --select F,E9 .
+
       - name: Rodar testes
         run: python -m pytest -q

@@ -89,36 +89,35 @@ class AgenteRefinamento:
                 continue
 
             regra_lower = texto_regra.lower()
-            frases = re.findall(r"['\"]([^'\"]+)['\"]", texto_regra)
+            # Só regras com trechos entre aspas são aplicáveis sem IA: sem aspas
+            # não há como saber qual texto remover/incluir (antes, o texto da
+            # própria regra acabava colado no relatório).
+            frases = [f.strip() for f in re.findall(r"['\"]([^'\"]+)['\"]", texto_regra) if f.strip()]
             if not frases:
-                frases = [texto_regra]
+                continue
+
+            if any(token in regra_lower for token in ["substitua", "troque", "substituir", "trocar"]):
+                # "Substitua 'A' por 'B'": troca A por B. Com um só trecho não há
+                # substituto conhecido, então o texto é mantido como está.
+                if len(frases) >= 2:
+                    antigo, novo = frases[0], frases[1]
+                    texto_final = re.sub(re.escape(antigo), lambda _m: novo, texto_final, flags=re.IGNORECASE)
+                continue
 
             if any(token in regra_lower for token in ["remova", "remover", "retire", "elimine", "exclua", "tirar"]):
                 for frase in frases:
-                    if not frase.strip():
-                        continue
                     texto_final = re.sub(re.escape(frase), "", texto_final, flags=re.IGNORECASE)
                     texto_final = re.sub(r"\s{2,}", " ", texto_final)
                     texto_final = re.sub(r"\s+([.,;:])", r"\1", texto_final)
                     texto_final = re.sub(r"\s+([\)])", r"\1", texto_final)
                     texto_final = re.sub(r"([\(])\s+", r"\1", texto_final)
                     texto_final = texto_final.strip()
+                continue
 
             if any(token in regra_lower for token in ["inclua", "adicione", "incluir", "adicionar", "insira", "garanta", "deve conter", "deve ter"]):
                 for frase in frases:
-                    if not frase.strip():
-                        continue
-                    frase_norm = frase.strip()
-                    if frase_norm.lower() not in texto_final.lower():
-                        texto_final = f"{texto_final.rstrip()} — {frase_norm}"
-
-            if any(token in regra_lower for token in ["substitua", "troque", "substituir", "trocar"]) and frases:
-                padrao = frases[0].strip()
-                if padrao and padrao.lower() in texto_final.lower():
-                    texto_final = re.sub(re.escape(padrao), "", texto_final, flags=re.IGNORECASE)
-
-            if "aplique todas as regras" in regra_lower:
-                continue
+                    if frase.lower() not in texto_final.lower():
+                        texto_final = f"{texto_final.rstrip()} — {frase}"
 
         texto_final = re.sub(r"\s+([.,;:])", r"\1", texto_final)
         texto_final = re.sub(r"\s{2,}", " ", texto_final)
