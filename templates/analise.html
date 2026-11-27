@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Análise de rastreio{% endblock %}
+{% block estilo %}
+<style>
+  .topo-arquivo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .arquivo-atual { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font-size: 13px; line-height: 1.3; max-width: 360px; }
+  .arquivo-atual svg { width: 18px; height: 18px; fill: none; stroke: var(--accent); stroke-width: 2; flex: 0 0 18px; }
+  .arquivo-atual small { color: var(--muted); display: block; }
+  .envio { display: flex; align-items: center; gap: 8px; }
+  .numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 900px) { .numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .numero { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; display: flex; gap: 14px; align-items: center; }
+  .numero .ico { width: 40px; height: 40px; border-radius: 12px; background: var(--soft); display: grid; place-items: center; flex: 0 0 40px; }
+  .numero .ico svg { width: 20px; height: 20px; fill: none; stroke: var(--ink-2); stroke-width: 2; }
+  .numero .ico.roxo { background: var(--accent-soft); } .numero .ico.roxo svg { stroke: var(--accent); }
+  .numero .ico.ambar { background: var(--warn-soft); } .numero .ico.ambar svg { stroke: var(--warn); }
+  .numero .rot { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .numero .val { font-size: 22px; font-weight: 800; }
+  .barra-abas { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .abas { display: flex; flex-wrap: wrap; gap: 4px; background: var(--soft); padding: 4px; border-radius: 12px; }
+  .abas a { padding: 9px 14px; border-radius: 9px; color: #475569; font-weight: 500; font-size: 13px; text-decoration: none; }
+  .abas a.ativa { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 2px rgba(15,23,42,.08); }
+  .filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+  .filtros label { font-size: 12px; font-weight: 600; color: #475569; display: flex; flex-direction: column; gap: 4px; }
+  .filtros select, .filtros input { width: auto; min-width: 120px; }
+  .linhas { display: flex; flex-direction: column; padding: 6px 10px 10px; }
+  details.placa-linha { border-radius: 12px; }
+  details.placa-linha > summary { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 13px 12px; border-radius: 12px; cursor: pointer; }
+  details.placa-linha > summary::-webkit-details-marker { display: none; }
+  details.placa-linha > summary:hover { background: var(--page); }
+  details.placa-linha .texto { flex: 1 1 360px; color: var(--ink-2); line-height: 1.55; }
+  details.placa-linha .acoes-linha { display: flex; align-items: center; gap: 8px; }
+  details.placa-linha .lapis { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); }
+  details.placa-linha .lapis svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+  details.placa-linha[open] { background: var(--accent-soft); border: 1px solid var(--accent-line); margin: 2px 0; }
+  details.placa-linha[open] .placa { background: var(--accent); color: #fff; }
+  .editor { padding: 0 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .editor textarea { min-height: 70px; border-color: #c4b5fd; }
+  .mapa { font-size: 12px; font-weight: 600; text-decoration: none; }
+  .completa textarea { min-height: 260px; font: 13px/1.6 'Plus Jakarta Sans', sans-serif; background: var(--page); }
+  .relatorio-texto { margin: 0; white-space: pre-wrap; font: 13px/1.7 'JetBrains Mono', monospace; color: var(--ink-2); background: var(--page); border: 1px solid var(--line); border-radius: 12px; padding: 18px; max-height: 600px; overflow: auto; }
+  .boas-vindas { padding: 48px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .boas-vindas h2 { margin: 0; font-size: 20px; }
+</style>
+{% endblock %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div>
+    <div class="sub">Operação{% if data_extenso %} · {{ data_extenso }}{% endif %}</div>
+    <h1>Análise de rastreio</h1>
+  </div>
+  <div class="topo-arquivo">
+    {% if tem_arquivo %}
+    <div class="arquivo-atual"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V8z"/><path d="M14 3v5h5"/></svg>
+      <div><strong>{{ arquivo_nome }}</strong>{% if resultado and resultado.data_mensagem %}<small>Mensagem de {{ resultado.data_mensagem.strftime('%d/%m/%Y') }}, a partir das 21:00 do dia anterior</small>{% endif %}</div></div>
+    {% endif %}
+    <form class="envio" method="post" action="/" enctype="multipart/form-data">{{ csrf_input() }}
+      <input id="arquivo" class="oculto" type="file" name="arquivo" accept=".csv,.xls,.xlsx" required onchange="if (this.files.length) this.form.submit()">
+      <label class="btn btn-escuro" for="arquivo" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); this.click(); }"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></svg>{{ 'Nova planilha' if tem_arquivo else 'Enviar planilha' }}</label>
+      <noscript><button class="btn" type="submit">Enviar</button></noscript>
+    </form>
+  </div>
+</div>
+
+{% if not tem_arquivo %}
+<section class="cartao boas-vindas">
+  <h2>Envie a planilha da SS para começar</h2>
+  <p class="dica">Exporte o <strong>relatório histórico completo</strong> a partir das 21:00 do dia anterior e envie no botão acima.<br>Outras planilhas de rastreamento (CSV ou Excel) também funcionam no relatório por placa.</p>
+</section>
+{% else %}
+
+{% if resultado and resultado.aviso_periodo %}<div class="aviso aviso-warning">{{ resultado.aviso_periodo }}</div>{% endif %}
+
+{% if resultado %}
+<div class="numeros">
+  <div class="numero"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><div><div class="rot">Veículos</div><div class="val">{{ resultado.totais.veiculos }}</div></div></div>
+  <div class="numero"><span class="ico roxo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><div><div class="rot">Já saíram</div><div class="val">{{ resultado.totais.sairam }}</div></div></div>
+  <div class="numero"><span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span><div><div class="rot">Parados no local</div><div class="val">{{ resultado.totais.parados }}</div></div></div>
+  <div class="numero"><span class="ico ambar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/></svg></span><div><div class="rot">Pontos sem POI</div><div class="val" style="color:var(--warn)">{{ resultado.totais.sem_poi }}</div></div></div>
+</div>
+{% endif %}
+
+{% set q = '&placa=' ~ (placa_escolhida|urlencode) ~ '&raio=' ~ (raio|int) %}
+<div class="barra-abas">
+  <nav class="abas" aria-label="Abas da análise">
+    {% if resultado %}<a href="/?aba=mensagem{{ q }}" class="{{ 'ativa' if aba == 'mensagem' }}">Mensagem do dia</a>{% endif %}
+    <a href="/?aba=relatorio{{ q }}" class="{{ 'ativa' if aba == 'relatorio' }}">Relatório por placa</a>
+    <a href="/?aba=linha{{ q }}" class="{{ 'ativa' if aba == 'linha' }}">Linha do tempo</a>
+    <a href="/?aba=paradas{{ q }}" class="{{ 'ativa' if aba == 'paradas' }}">Paradas sem POI</a>
+  </nav>
+  {% if aba in ('relatorio', 'linha', 'paradas') %}
+  <form class="filtros" method="get" action="/">
+    <input type="hidden" name="aba" value="{{ aba }}">
+    {% if aba != 'paradas' %}<label>Placa<select name="placa">{% for p in placas %}<option value="{{ p }}" {{ 'selected' if p == placa_escolhida }}>{{ p }}</option>{% endfor %}</select></label>{% endif %}
+    <label>Raio de tolerância (m)<input type="number" name="raio" value="{{ raio|int }}" min="10" step="10"></label>
+    <button class="btn" type="submit">Atualizar</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if aba == 'mensagem' %}
+<section class="cartao">
+  <div class="cartao-topo">
+    <div><h2>Horário de saída das Carretas · {{ resultado.data_mensagem.strftime('%d/%m/%Y') }}</h2><p>Clique numa placa para ajustar a linha dela</p></div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px">
+      {% if docx_available %}<a class="btn" href="/download_word">Word</a>{% endif %}
+      <a class="btn" href="/mensagem/excel" title="Pontos sem POI com nome sugerido, coordenadas e link do mapa">Excel p/ cadastro na SS</a>
+    </div>
+  </div>
+  <div class="linhas">
+    {% for placa, linha in resultado.linhas.items() %}
+    {% set situacao = resultado.situacoes[placa] %}
+    {% set editada = placa in edicoes %}
+    <details class="placa-linha" id="placa-{{ placa }}">
+      <summary>
+        <span class="placa">{{ placa }}</span>
+        <span class="etiqueta {{ 'roxa' if situacao.startswith('Saiu') else ('ambar' if situacao == 'Parado' else '') }}">{{ situacao }}</span>
+        <span class="texto">{{ edicoes[placa] if editada else linha }}</span>
+        <span class="acoes-linha">
+          {% if editada %}<span class="etiqueta roxa">editada</span>{% endif %}
+          {% if posicoes and placa in posicoes %}<a class="mapa" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ posicoes[placa][0] }},{{ posicoes[placa][1] }}">mapa</a>{% endif %}
+          <span class="lapis" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></span>
+        </span>
+      </summary>
+      <form class="editor" method="post" action="/mensagem/editar">{{ csrf_input() }}
+        <input type="hidden" name="placa" value="{{ placa }}">
+        <label class="campo" for="texto-{{ placa }}">Linha de {{ placa }}</label>
+        <textarea id="texto-{{ placa }}" name="texto">{{ edicoes[placa] if editada else linha }}</textarea>
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <button class="btn btn-primario" type="submit" name="acao" value="salvar">Salvar</button>
+          {% if editada %}<button class="btn" type="submit" name="acao" value="restaurar" formnovalidate>Voltar ao original</button>{% endif %}
+        </div>
+      </form>
+    </details>
+    {% endfor %}
+  </div>
+</section>
+<section class="cartao completa">
+  <div class="cartao-topo"><div><h2>Mensagem completa</h2><p>Já com as suas edições. Selecione o texto para colar no grupo.</p></div></div>
+  <div class="cartao-corpo"><textarea readonly aria-label="Mensagem completa">{{ texto_completo }}</textarea></div>
+</section>
+
+{% elif aba == 'relatorio' %}
+<section class="cartao">
+  <div class="cartao-topo"><div><h2>Relatório de {{ placa_escolhida }}</h2><p>Entradas e saídas em POIs, refinadas pelas regras de IA.</p></div></div>
+  <div class="cartao-corpo">{% if relatorio %}<pre class="relatorio-texto">{{ relatorio }}</pre>{% else %}<p class="vazio">Nenhum evento para esta placa.</p>{% endif %}</div>
+</section>
+
+{% elif aba == 'linha' %}
+<section class="cartao">
+  <div class="cartao-topo"><div><h2>Linha do tempo de {{ placa_escolhida }}</h2><p>Paradas em POIs, excessos de velocidade e paradas suspeitas.</p></div></div>
+  <div class="cartao-corpo tabela-box">
+    {% if eventos %}
+    <table><thead><tr><th>Início</th><th>Fim</th><th>Evento</th></tr></thead><tbody>
+    {% for ev in eventos %}
+      <tr><td class="mono">{{ ev['inicio'] }}</td><td class="mono">{{ ev['fim'] or '—' }}</td>
+        <td>{% if ev['tipo'] == 'poi' %}Parada em <strong>{{ ev['local'] }}</strong>
+          {% elif ev['tipo'] == 'excesso_velocidade' %}<span class="etiqueta" style="background:var(--danger-soft); color:var(--danger)">Excesso: {{ ev['velocidade_maxima']|int }} km/h</span>
+          {% elif ev['tipo'] == 'parada_suspeita' %}<span class="etiqueta ambar">Parada fora de POI</span>
+          {% else %}{{ ev['tipo'] }}{% endif %}
+          {% if ev.get('em_andamento') %} <span class="etiqueta roxa">em andamento</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p class="vazio">Nenhum evento para esta placa.</p>{% endif %}
+  </div>
+</section>
+
+{% elif aba == 'paradas' %}
+<section class="cartao">
+  <div class="cartao-topo"><div><h2>Paradas sem POI</h2><p>Paradas de 10 min ou mais longe de qualquer POI cadastrado (raio {{ raio|int }} m).</p></div></div>
+  <div class="cartao-corpo tabela-box">
+    {% if paradas %}
+    <table><thead><tr><th>Placa</th><th>Início</th><th>Fim</th><th>Duração</th><th>Registros</th></tr></thead><tbody>
+    {% for item in paradas %}<tr><td><span class="placa">{{ item['Placa'] }}</span></td><td class="mono">{{ item['Início'] }}</td><td class="mono">{{ item['Fim'] }}</td><td>{{ item['Duração'] }}</td><td>{{ item['Registros'] }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="vazio">Nenhuma parada fora dos POIs.</p>{% endif %}
+  </div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

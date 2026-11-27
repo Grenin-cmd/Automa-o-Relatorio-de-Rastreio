@@ -58,7 +58,11 @@
     width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink);
     font: 14px 'Plus Jakarta Sans', sans-serif; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-line); border-color: var(--accent); }
-  input[type=file] { font: 13px 'Plus Jakarta Sans', sans-serif; }
+  input[type=file] { font: 13px 'Plus Jakarta Sans', sans-serif; color: var(--muted); max-width: 100%; }
+  input[type=file]::file-selector-button { margin-right: 10px; min-height: 38px; padding: 0 14px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--soft); color: var(--ink-2); font: 600 13px 'Plus Jakarta Sans', sans-serif; cursor: pointer; }
+  input[type=file]::file-selector-button:hover { background: var(--line); }
+  .oculto { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: 11px;
     border: 1px solid var(--line); background: #fff; color: var(--ink-2); font: 600 13px 'Plus Jakarta Sans', sans-serif; cursor: pointer; text-decoration: none; }
   .btn:hover { background: var(--soft); }

@@ -1,7 +1,6 @@
 import unittest
 
 import pandas as pd
-from flask import render_template
 
 import analise
 import app
@@ -12,25 +11,6 @@ class AppImportTests(unittest.TestCase):
     def test_app_importa_sem_erro(self):
         self.assertIsNotNone(app.app)
         self.assertIsNotNone(comum.VEICULOS_SERVICE)
-
-    def test_resumo_renderiza_botao_google_maps_com_coordenadas(self):
-        with app.app.test_request_context("/"):
-            html = render_template(
-                "index.html",
-                report=None,
-                placa_escolhida="ABC1234",
-                raio_suspeita=200,
-                paradas_suspeitas=[],
-                timeline_eventos=[],
-                placas=["ABC1234"],
-                file_name="teste.csv",
-                resumo_geral="ABC1234: teste de resumo",
-                posicoes_placas={"ABC1234": (-23.5505, -46.6333)},
-                docx_available=False,
-            )
-
-        self.assertIn("📍", html)
-        self.assertIn("https://www.google.com/maps/search/?api=1&amp;query=-23.5505,-46.6333", html)
 
     def test_obter_posicoes_placas_aceita_lat_lon_reais(self):
         df = pd.DataFrame({

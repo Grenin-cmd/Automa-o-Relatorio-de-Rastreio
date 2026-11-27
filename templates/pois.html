@@ -43,8 +43,8 @@
       const r = await fetch('/api/pois?limite=200&q=' + encodeURIComponent(termo || ''), { credentials: 'same-origin' });
       const j = await r.json(); if (!j.ok) throw new Error(j.erro || 'falha');
       corpo.innerHTML = j.dados.map(p => `<tr><td><input type="checkbox" name="poi_ids" value="${esc(p.id)}" aria-label="Selecionar ${esc(p.nome)}"></td>
-        <td style="font-weight:600">${esc(p.nome)}</td><td>${esc(p.tipo)}</td><td>${esc(p.cidade)}</td><td>${Math.round(Number(p.raio_metros)||0)} m</td>
-        <td class="mono" style="color:var(--muted)">${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}</td></tr>`).join('')
+        <td style="font-weight:600">${esc(p.nome)}</td><td>${esc(p.tipo)}</td><td>${esc(p.cidade)}</td><td style="white-space:nowrap">${Math.round(Number(p.raio_metros)||0)} m</td>
+        <td class="mono" style="color:var(--muted); white-space:nowrap">${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}</td></tr>`).join('')
         || '<tr><td colspan="6" class="vazio">Nenhum ponto encontrado.</td></tr>';
       info.textContent = j.total > j.dados.length ? `Mostrando ${j.dados.length} de ${j.total}. Refine a busca para ver outros.` : `${j.total} resultado(s).`;
     } catch (e) { info.textContent = 'Não foi possível carregar os POIs: ' + e.message; }
