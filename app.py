@@ -31,6 +31,7 @@ from rotas import api as rotas_api
 from rotas import auditoria as rotas_auditoria
 from rotas import auth as rotas_auth
 from rotas import configuracoes as rotas_configuracoes
+from rotas import mensagem as rotas_mensagem
 from rotas.comum import VEICULOS_SERVICE, usuario_atual
 
 app = Flask(__name__, template_folder=config.template_folder())
@@ -41,7 +42,7 @@ app.config.update(
     CSRF_ENABLED=True,
 )
 
-for _modulo in (rotas_auth, rotas_analise, rotas_configuracoes, rotas_auditoria, rotas_api):
+for _modulo in (rotas_auth, rotas_analise, rotas_configuracoes, rotas_auditoria, rotas_api, rotas_mensagem):
     app.register_blueprint(_modulo.bp)
 
 banco.init_db()

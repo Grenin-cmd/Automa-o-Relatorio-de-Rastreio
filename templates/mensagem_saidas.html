@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mensagem de saídas | Análise Inteligente de Frotas</title>
+<style>
+  :root { --ink: #172033; --muted: #6b7280; --line: #dce3ec; --soft: #f5f7fa; --accent: #6d3df5; --danger: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; background: #f7f9fc; color: var(--ink); font: 14px Arial, sans-serif; }
+  aside { width: 260px; flex: 0 0 260px; min-height: 100vh; padding: 24px 18px; background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+  aside h1 { margin: 0 0 4px; font: 700 17px Georgia, serif; } aside p { margin: 0 0 28px; color: var(--muted); font-size: 12px; }
+  nav { display: grid; gap: 8px; } nav a { padding: 11px 12px; color: var(--ink); text-decoration: none; border: 1px solid transparent; } nav a:hover, nav a.active { background: var(--soft); border-color: var(--line); }
+  .logout { margin-top: auto; color: var(--muted); text-decoration: none; font-size: 12px; }
+  main { width: min(1100px, 100%); padding: 42px; } header { display: flex; justify-content: space-between; align-items: end; margin-bottom: 26px; } h2 { margin: 0; font: 700 25px Georgia, serif; } .user { color: var(--muted); font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px; } section { background: #fff; border: 1px solid var(--line); padding: 22px; } h3 { margin: 0 0 7px; font-size: 15px; } .hint { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  label { display: block; margin: 12px 0 5px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; } input { width: 100%; padding: 10px; border: 1px solid var(--line); } button { margin-top: 14px; padding: 10px 13px; border: 0; background: var(--ink); color: #fff; cursor: pointer; font-weight: 700; } button.secondary { background: var(--soft); color: var(--ink); border: 1px solid var(--line); margin: 0; padding: 7px 9px; font-size: 11px; }
+  .upload { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .upload input { flex: 1; min-width: 180px; } .count { color: var(--muted); font-size: 12px; margin-top: 18px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; } th, td { padding: 10px 6px; text-align: left; border-bottom: 1px solid var(--line); } th { color: var(--muted); font-size: 10px; text-transform: uppercase; } .flash { padding: 11px 14px; margin-bottom: 18px; background: #eefbf3; border: 1px solid #b7ebc8; color: #176b37; } .flash-warning { background: #fff8e6; border-color: #f2d38a; color: #855b00; } .flash-danger { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+  @media (max-width: 720px) { body { display: block; } aside { width: 100%; min-height: auto; border-right: 0; border-bottom: 1px solid var(--line); } .logout { margin-top: 18px; } main { padding: 24px 16px; } header { display: block; } .user { margin-top: 8px; } }
+</style>
+<style>
+  .duas { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 18px; align-items: start; }
+  @media (max-width: 980px) { .duas { grid-template-columns: 1fr; } }
+  textarea.msg { width: 100%; min-height: 420px; padding: 14px; border: 1px solid var(--line); font: 14px/1.55 Arial, sans-serif; resize: vertical; background: #fbfcfe; }
+  .acoes { display: flex; gap: 8px; align-items: center; margin-top: 10px; } .acoes .ok { color: #176b37; font-size: 12px; display: none; }
+  .aviso { padding: 11px 14px; margin-bottom: 14px; background: #fff8e6; border: 1px solid #f2d38a; color: #855b00; font-size: 13px; }
+  .item { border: 1px solid var(--line); padding: 14px; margin-top: 12px; background: #fff; }
+  .item h4 { margin: 0 0 4px; font-size: 13px; } .item .det { color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .item form.aceite { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: end; margin-top: 10px; }
+  .item form.aceite .campo-nome { grid-column: 1 / -1; }
+  .item form.aceite label { margin: 0 0 3px; } .item form.aceite button { margin: 0; }
+  .item select, .item input { width: 100%; padding: 8px; border: 1px solid var(--line); font-size: 12px; }
+  .sug { display: inline-block; margin-top: 6px; padding: 2px 7px; background: #f1ecff; color: #4b2bb8; font-size: 11px; }
+  .vazio { color: var(--muted); font-size: 13px; padding: 10px 0; }
+  a.link { color: var(--accent); font-size: 12px; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Análise Inteligente de Frotas</h1><p>Auditoria & Telemetria com IA</p>
+  <nav>
+    <a href="/?feature=analysis">Análise de rastreio</a>
+    <a href="/mensagem_saidas" class="active">Mensagem de saídas</a>
+    <a href="/auditoria_roteiro">Auditoria de roteiro</a>
+    <a href="/locais_importantes">Locais importantes</a>
+    <a href="/configuracoes" aria-label="Configurações" title="Configurações">&#9881;</a>
+  </nav>
+  <a class="logout" href="/trocar_senha">Trocar minha senha</a>
+  <a class="logout" href="/logout" style="margin-top:8px">Sair de {{ usuario_atual.nome }}</a>
+</aside>
+<main style="width:min(1300px,100%)">
+  {% with messages = get_flashed_messages(with_categories=true) %}{% for category, message in messages %}<div class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}{% endwith %}
+  <header><h2>Mensagem de saídas</h2><span class="user">Perfil ativo: {{ usuario_atual.nome }}</span></header>
+
+  <section style="margin-bottom:18px">
+    <form class="upload" method="post" enctype="multipart/form-data">{{ csrf_input() }}
+      <input type="file" name="arquivo" accept=".csv" required>
+      <button type="submit" style="margin:0">Gerar mensagem</button>
+    </form>
+    <p class="hint" style="margin:10px 0 0">Exporte da SS o <strong>histórico completo</strong> a partir das 18:00 do dia anterior.
+    {% if arquivo_nome %}Arquivo atual: <strong>{{ arquivo_nome }}</strong>{% endif %}</p>
+  </section>
+
+  {% if resultado %}
+  {% if resultado.aviso_periodo %}<div class="aviso">⚠ {{ resultado.aviso_periodo }}</div>{% endif %}
+  <div class="duas">
+    <section>
+      <h3>Mensagem pronta</h3>
+      <textarea id="texto" class="msg" readonly>{{ resultado.texto }}</textarea>
+      <div class="acoes"><button type="button" style="margin:0" onclick="copiar()">📋 Copiar</button><span id="copiado" class="ok">Copiado!</span></div>
+    </section>
+    <section>
+      <h3>Conferir ({{ resultado.conferir|length }})</h3>
+      <p class="hint">Fora da mensagem. Cadastre o local para que ele seja reconhecido automaticamente nos próximos dias.</p>
+      {% for item in resultado.conferir %}
+      <div class="item">
+        <h4>⚠ {{ item.placa }} — {{ item.descricao }}</h4>
+        {% if item.parada %}
+        {% set p = item.parada %}
+        <div class="det">
+          {{ p.inicio.strftime('%d/%m %H:%M') }} → {{ (p.saida or p.fim).strftime('%d/%m %H:%M') }} ({{ p.duracao_min|round|int }} min)<br>
+          {{ p.endereco }}{% if p.poi_ss %}<br>POI da SS mais próximo: {{ p.poi_ss }}{% if p.poi_ss_dist_m is not none %} ({{ p.poi_ss_dist_m|int }} m){% endif %}{% endif %}
+          {% if p.lat is not none %}<br><a class="link" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ p.lat }},{{ p.lon }}">Ver no mapa</a>{% endif %}
+        </div>
+        {% if item.motivo == 'local_desconhecido' %}
+        {% set sug = sugestoes.get(item.chave) %}
+        {% if sug %}<span class="sug">Sugestão (OpenStreetMap): {{ sug }}</span>{% endif %}
+        <form class="aceite" method="post" action="/mensagem_saidas/aceitar">{{ csrf_input() }}
+          <div class="campo-nome"><label>Nome na mensagem</label><input name="nome_exibicao" required value="{{ (sug ~ ' em ' ~ p.cidade ~ ' ' ~ p.uf) if sug else '' }}" placeholder="Ex.: Posto X na BR-262 em Luz MG"></div>
+          <div><label>Artigo</label><select name="genero"><option value="o">do/no</option><option value="a">da/na</option></select></div>
+          <div><label>Tipo</label><select name="tipo">{% for t in tipos %}<option value="{{ t }}" {% if t == 'POSTO' %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select></div>
+          <button type="submit">Cadastrar</button>
+          <input type="hidden" name="raio_m" value="250"><input type="hidden" name="aliases_ss" value="{{ p.poi_ss if p.poi_ss and p.poi_ss_dist_m is not none and p.poi_ss_dist_m <= 250 else '' }}">
+          <input type="hidden" name="latitude" value="{{ p.lat if p.lat is not none else '' }}"><input type="hidden" name="longitude" value="{{ p.lon if p.lon is not none else '' }}">
+        </form>
+        {% endif %}
+        {% endif %}
+        <form method="post" action="/mensagem_saidas/ignorar" style="margin-top:8px">{{ csrf_input() }}<input type="hidden" name="chave" value="{{ item.chave }}"><button class="secondary" type="submit">Ignorar</button></form>
+      </div>
+      {% else %}
+      <p class="vazio">Nada para conferir. ✔</p>
+      {% endfor %}
+      {% if resultado.conferir %}<p style="margin-top:16px"><a class="link" href="/mensagem_saidas/relatorio.xlsx">⬇ Relatório de pontos sem cadastro (Excel, para cadastrar na SS)</a></p>{% endif %}
+    </section>
+  </div>
+  {% endif %}
+</main>
+<script>
+  function copiar() {
+    const campo = document.getElementById('texto');
+    const ok = () => { const s = document.getElementById('copiado'); s.style.display = 'inline'; setTimeout(() => s.style.display = 'none', 2000); };
+    const alternativo = () => { campo.focus(); campo.select(); document.execCommand('copy'); ok(); };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(campo.value).then(ok).catch(alternativo);
+    } else {
+      alternativo();
+    }
+  }
+</script>
+</body>
+</html>
