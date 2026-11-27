@@ -110,7 +110,9 @@ as carretas ficam a 208–247 m do ponto da SS.)
    Numa parada unificada, vale o primeiro trecho que caiu dentro de um local cadastrado
    (é dele o horário de chegada); a saída é sempre a do último trecho.
 5. **Horário de chegada:** primeiro registro parado dentro do local.
-6. **Horário de saída:** primeiro registro após a parada com velocidade ≥ 10 km/h.
+6. **Horário de saída:** primeiro registro após a parada com velocidade > 3 km/h
+   (o veículo volta a andar). Verificado contra os dois gabaritos: todas as saídas ficam
+   a ≤ 2 min do horário manual. (Com "≥ 10 km/h" a saída do RNY em 26/11 iria para 03:12.)
 7. **Duração da parada:** do horário de chegada ao de saída (não só o trecho com registros parados).
    (Verificado contra o gabarito: todas as saídas ficam a ≤ 2 min do horário manual.)
 
@@ -151,7 +153,10 @@ PLACA: frase.
 
 Aparece ao lado da mensagem, só para o usuário:
 - parada desconhecida ≥ 30 min (origem ou meio da viagem);
-- veículo em movimento no início do arquivo;
+- veículo em movimento no início do arquivo cuja primeira parada dura menos de 2 h
+  (se dormiu num local, a origem é confiável);
+- aviso geral quando a planilha toda começa no próprio dia (ex.: 00:00): saídas da véspera
+  não aparecem — exportar a partir das 18:00 do dia anterior;
 - veículo sem nenhuma parada (em trânsito o tempo todo).
 
 Para cada parada desconhecida: placa, início/fim/duração, endereço, cidade/UF,
@@ -203,7 +208,7 @@ Novo item no menu: **Mensagem de saídas**.
 - Módulos novos: `mensagem_saidas/` (leitura SS, detector de paradas, regras, texto),
   `rotas/mensagem.py`, template `mensagem_saidas.html`, tabela/migração em `banco.py`.
 - Reaproveitar `geo.pontos_dentro_de_algum_poi` / `haversine_metros` e `seguranca`.
-- Limiares (3 km/h, 10 km/h, 1,5 km, 15 min, 30 min, 5 min, raio 250 m) num só lugar,
+- Limiares (3 km/h, 1,5 km, 15 min, 30 min, 5 min, raio 250 m) num só lugar,
   como constantes nomeadas.
 - Integração das alterações pendentes do Codespaces do usuário quando estiverem
   disponíveis num branch (o módulo novo é isolado para minimizar conflitos).
