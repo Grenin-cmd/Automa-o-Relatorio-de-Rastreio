@@ -20,3 +20,4 @@ poi_store.db
 build/
 dist/
 *.spec
+.superpowers/
