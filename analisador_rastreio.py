@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 import math
-import os
 import re
 import unicodedata
 import numpy as np
@@ -121,18 +120,6 @@ class RastreamentoAnalyzer:
             self._pois_lat_rad = np.array([])
             self._pois_lon_rad = np.array([])
             self._pois_limite_m = np.array([])
-
-    def _distancia_metros(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-        R = 6371000.0
-        phi1 = math.radians(lat1)
-        phi2 = math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlambda = math.radians(lon2 - lon1)
-        a = (
-            math.sin(dphi / 2) ** 2
-            + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-        )
-        return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     def _buscar_poi_por_coordenada(self, lat: float, lon: float) -> tuple[PontoInteresse | None, float]:
         if not self._pois_validos:
@@ -737,20 +724,3 @@ class RastreamentoAnalyzer:
                 f"{evento['inicio']} -> {evento['fim']} | duração: {evento['duracao_seg']} s"
             )
         return "\n".join(linhas)
-
-
-def carregar_excel(caminho: str) -> pd.DataFrame:
-    if not os.path.exists(caminho):
-        raise FileNotFoundError(f"Arquivo não encontrado: {caminho}.")
-    return pd.read_excel(caminho)
-
-
-def carregar_planilha(caminho: str) -> pd.DataFrame:
-    if not os.path.exists(caminho):
-        raise FileNotFoundError(f"Arquivo não encontrado: {caminho}.")
-    extensao = os.path.splitext(caminho)[1].lower()
-    if extensao == ".csv":
-        return pd.read_csv(caminho)
-    if extensao in {".xlsx", ".xls"}:
-        return pd.read_excel(caminho)
-    raise ValueError("Formato de arquivo não suportado. Use CSV ou Excel.")

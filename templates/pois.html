@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Base de POIs{% endblock %}
+{% block conteudo %}
+<div class="cabecalho">
+  <div><div class="sub">Cadastros</div><h1>Base de POIs</h1></div>
+  <span class="etiqueta">{{ total_pois }} ponto(s) cadastrado(s)</span>
+</div>
+<div class="grade" style="grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)">
+  <section class="cartao">
+    <div class="cartao-topo"><div><h2>Importar planilha</h2><p>Substitui a base atual pelos pontos da planilha (CSV ou Excel).</p></div></div>
+    <form class="cartao-corpo" method="post" action="/" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:12px">{{ csrf_input() }}
+      <input type="hidden" name="action" value="import_pois">
+      <label class="campo" for="arquivo_pois">Arquivo</label>
+      <input id="arquivo_pois" type="file" name="arquivo_pois" accept=".csv,.xls,.xlsx" required>
+      <button class="btn btn-escuro" type="submit">Importar base</button>
+    </form>
+  </section>
+  <section class="cartao">
+    <div class="cartao-topo">
+      <div><h2>Pontos cadastrados</h2><p id="infoPOIs">Digite para buscar por nome, cidade ou tipo.</p><p class="dica">A caixa do cabeçalho seleciona todos os pontos listados.</p></div>
+      <button class="btn btn-perigo btn-pequeno" type="submit" form="formExcluir" onclick="return confirm('Excluir os pontos selecionados?')">Excluir selecionados</button>
+    </div>
+    <div class="cartao-corpo">
+      <input id="buscaPOIs" type="search" placeholder="Buscar POI…" aria-label="Buscar POI" oninput="filtrar(this.value)">
+      <form id="formExcluir" method="post" action="/excluir_pois">{{ csrf_input() }}
+        <div class="tabela-box" style="max-height: 520px; margin-top: 12px">
+          <table><thead><tr><th style="width:32px"><input type="checkbox" aria-label="Selecionar todos" title="Selecionar todos" onchange="document.querySelectorAll('input[name=poi_ids]').forEach(c => c.checked = this.checked)"></th><th>Nome</th><th>Tipo</th><th>Cidade</th><th>Raio</th><th>Coordenadas</th></tr></thead>
+          <tbody id="corpoPOIs"></tbody></table>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  let timer = null;
+  function filtrar(t) { clearTimeout(timer); timer = setTimeout(() => carregar(t), 250); }
+  function esc(v) { const d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
+  async function carregar(termo) {
+    const corpo = document.getElementById('corpoPOIs'), info = document.getElementById('infoPOIs');
+    try {
+      const r = await fetch('/api/pois?limite=200&q=' + encodeURIComponent(termo || ''), { credentials: 'same-origin' });
+      const j = await r.json(); if (!j.ok) throw new Error(j.erro || 'falha');
+      corpo.innerHTML = j.dados.map(p => `<tr><td><input type="checkbox" name="poi_ids" value="${esc(p.id)}" aria-label="Selecionar ${esc(p.nome)}"></td>
+        <td style="font-weight:600">${esc(p.nome)}</td><td>${esc(p.tipo)}</td><td>${esc(p.cidade)}</td><td style="white-space:nowrap">${Math.round(Number(p.raio_metros)||0)} m</td>
+        <td class="mono" style="color:var(--muted); white-space:nowrap">${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}</td></tr>`).join('')
+        || '<tr><td colspan="6" class="vazio">Nenhum ponto encontrado.</td></tr>';
+      info.textContent = j.total > j.dados.length ? `Mostrando ${j.dados.length} de ${j.total}. Refine a busca para ver outros.` : `${j.total} resultado(s).`;
+    } catch (e) { info.textContent = 'Não foi possível carregar os POIs: ' + e.message; }
+  }
+  carregar('');
+</script>
+{% endblock %}

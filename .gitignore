@@ -1,2 +1,23 @@
+# Segredos e configuração local
 .env
+.env.txt
+.secret_key
+senha_inicial_admin.txt
+
+# Python
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Banco SQLite (dados e usuários ficam só na máquina, nunca no git)
+poi_store.db
+*.db-wal
+*.db-shm
+
+# Build (PyInstaller)
+build/
+dist/
+*.spec
+.superpowers/

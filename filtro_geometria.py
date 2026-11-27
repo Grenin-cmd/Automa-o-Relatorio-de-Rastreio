@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import math
 from typing import Any, cast
 import pandas as pd
 
+from geo import haversine_metros
 
-def calcular_haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Calcula a distância entre dois pontos em metros."""
-    raio_terra = 6371000.0
-    phi1, phi2 = math.radians(float(lat1)), math.radians(float(lat2))
-    delta_phi = math.radians(float(lat2) - float(lat1))
-    delta_lambda = math.radians(float(lon2) - float(lon1))
 
-    a = (
-        math.sin(delta_phi / 2.0) ** 2
-        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
-    )
-    return 2.0 * raio_terra * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+# Mantido por compatibilidade: a implementação única fica em geo.py.
+calcular_haversine = haversine_metros
 
 
 def sanitizar_telemetria(

@@ -25,6 +25,24 @@ class AgenteRefinamentoTests(unittest.TestCase):
 
         self.assertEqual(resultado, relatorio)
 
+    def test_regra_substitua_troca_pelo_novo_texto(self):
+        agente = AgenteRefinamento()
+        resultado = agente._aplicar_regras_local(
+            "Chegou no CD Matriz às 10:00.", ["Substitua 'CD Matriz' por 'Centro de Distribuição'."]
+        )
+        self.assertEqual(resultado, "Chegou no Centro de Distribuição às 10:00.")
+
+    def test_regra_substitua_sem_novo_texto_nao_apaga(self):
+        agente = AgenteRefinamento()
+        texto = "Chegou no CD Matriz às 10:00."
+        self.assertEqual(agente._aplicar_regras_local(texto, ["Troque 'CD Matriz'."]), texto)
+
+    def test_regra_sem_aspas_nao_e_colada_no_relatorio(self):
+        # Antes, "Inclua ..." sem aspas colava o texto da própria regra no relatório.
+        agente = AgenteRefinamento()
+        texto = "Chegou no CD às 10:00."
+        self.assertEqual(agente._aplicar_regras_local(texto, ["Inclua o horário de saída quando houver."]), texto)
+
 
 if __name__ == "__main__":
     unittest.main()

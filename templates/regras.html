@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Regras de IA{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><div class="sub">Cadastros</div><h1>Regras de IA</h1></div>
+  <span class="etiqueta roxa">{{ regras_salvas|length }} regra(s) ativa(s)</span></div>
+<div class="grade" style="grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)">
+  <section class="cartao">
+    <div class="cartao-topo"><div><h2>Nova regra</h2><p>Instruções aplicadas ao refinamento do relatório por placa.</p></div></div>
+    <form class="cartao-corpo" method="post" action="/adicionar_regra_feedback" style="display:flex; flex-direction:column; gap:12px">{{ csrf_input() }}
+      <div><label class="campo" for="categoria">Categoria</label><select id="categoria" name="categoria"><option value="NOMENCLATURA">Nomenclatura</option><option value="GERAL" selected>Geral</option><option value="FORMATACAO">Formatação</option></select></div>
+      <div><label class="campo" for="descricao_regra">Instrução</label><textarea id="descricao_regra" name="descricao_regra" rows="4" required placeholder="Ex.: Substitua 'CECOTI MATRIZ' por 'Matriz'"></textarea></div>
+      <button class="btn btn-primario" type="submit">Adicionar regra</button>
+    </form>
+  </section>
+  <section class="cartao">
+    <div class="cartao-topo"><div><h2>Regras ativas</h2></div>
+      {% if regras_salvas %}<button class="btn btn-perigo btn-pequeno" type="submit" form="formRegras" onclick="return confirm('Excluir as regras selecionadas?')">Excluir selecionadas</button>{% endif %}</div>
+    <form id="formRegras" class="cartao-corpo" method="post" action="/excluir_regras">{{ csrf_input() }}
+      {% if regras_salvas %}
+      <div class="tabela-box"><table><thead><tr><th style="width:32px"><input type="checkbox" aria-label="Selecionar todas" title="Selecionar todas" onchange="document.querySelectorAll('input[name=regra_ids]').forEach(c => c.checked = this.checked)"></th><th>Categoria</th><th>Instrução</th></tr></thead><tbody>
+      {% for r in regras_salvas %}<tr><td><input type="checkbox" name="regra_ids" value="{{ r.id }}" aria-label="Selecionar regra"></td><td><span class="etiqueta">{{ r.categoria }}</span></td><td>{{ r.descricao }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<p class="vazio">Nenhuma regra cadastrada.</p>{% endif %}
+    </form>
+  </section>
+</div>
+{% endblock %}

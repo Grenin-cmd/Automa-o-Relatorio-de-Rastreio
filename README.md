@@ -1,37 +1,115 @@
 # Automa-o-Relatorio-de-Rastreio
 
-Este repositório contém um protótipo de agente em Python para analisar rastreamento de carretas a partir de um arquivo Excel e gerar um relatório de entradas e saídas em POIs como clientes, postos de gasolina, acostamentos e outros pontos importantes.
+Aplicação web em Python (Flask) para analisar o rastreamento de veículos a partir
+de planilhas CSV/Excel e gerar relatórios de entradas e saídas em POIs (clientes,
+postos, matriz etc.), paradas não cadastradas, linha do tempo da viagem,
+resumo geral por placa (com exportação para Word) e auditoria de roteiro
+(planejado × executado por GPS). Opcionalmente, os textos são refinados por IA.
 
-## Como usar
+## Instalação
 
-1. Instale as dependências:
-   ```bash
-   python -m pip install -r requirements.txt
-   ```
-2. Rode a interface web:
-   ```bash
-   python app.py
-   ```
-3. Abra o navegador no endereço mostrado no terminal, por exemplo:
-   ```text
-   http://127.0.0.1:5000/
-   ```
-4. Use o botão para selecionar seu arquivo CSV ou Excel e clique em "Executar análise".
-
-Ao abrir o sistema, faça login. O usuário inicial é `Victor` com a senha `Victor2005@`.
-Depois do login, escolha a funcionalidade na barra lateral. A base de POIs, as regras de IA
-e o cadastro de usuários ficam em **Configurações**. O usuário Victor pode autorizar outros
-perfis a cadastrar usuários.
-
-O arquivo Excel deve conter colunas com nomes como `timestamp`, `latitude`, `longitude` e `velocidade_kmh` (ou variações compatíveis como `data_hora`, `lat`, `lon` e `speed_kmh`).
-
-Observações:
-- A auditoria de roteiro não exige mais informar uma placa; quando necessário, ela usa todos os registros compatíveis das planilhas.
-- O arquivo carregado fica mantido na sessão do navegador, então você pode trocar a placa e reexecutar a análise sem precisar reenviar o arquivo.
-- Linhas sem informação de POI/local são destacadas em uma tabela separada para facilitar a limpeza dos dados.
-
-Exemplo de arquivo de dependências:
-```txt
-pandas
-openpyxl
+```bash
+python -m pip install -r requirements.txt
 ```
+
+Copie `.env.example` para `.env` e ajuste o que precisar (todas as variáveis são
+opcionais).
+
+## Executar
+
+```bash
+python app.py
+```
+
+O navegador abre automaticamente em `http://127.0.0.1:5000/`.
+
+Por padrão o servidor só aceita conexões **desta máquina**. Para liberar o acesso
+a outros computadores da rede, defina `HOST=0.0.0.0` no `.env`.
+
+## Primeiro acesso
+
+Quando o banco não tem nenhum usuário, um administrador é criado automaticamente:
+
+- nome: valor de `ADMIN_INICIAL_USUARIO` (padrão `admin`);
+- senha: valor de `ADMIN_INICIAL_SENHA` ou, se vazio, uma senha aleatória exibida
+  no console e salva em `senha_inicial_admin.txt` (o arquivo é apagado quando a
+  senha é trocada).
+
+No primeiro login a troca de senha é obrigatória. Em **Configurações**, perfis
+autorizados podem cadastrar usuários, liberar a permissão de cadastro, desativar
+acessos e gerar senhas temporárias.
+
+## Variáveis de ambiente
+
+| Variável | Para que serve |
+|---|---|
+| `FLASK_SECRET_KEY` | Assina o cookie de sessão. Se vazia, é gerada e salva em `.secret_key`. |
+| `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_SENHA` | Primeiro administrador (veja acima). |
+| `HOST` / `PORT` | Endereço e porta do servidor (padrão `127.0.0.1:5000`). |
+| `API_TOKEN` | Token das rotas `/api/*` (`Authorization: Bearer <token>` ou `X-API-Key`). Sem ele, as APIs exigem usuário logado. |
+| `RASTREIO_DATA_DIR` | Pasta do banco `poi_store.db` e da chave secreta (padrão: pasta do programa). |
+| `OPENROUTER_API_KEY` / `GEMINI_API_KEY` | Chaves dos provedores de IA (opcionais). Sem elas o sistema tenta o Ollama local e, por fim, aplica as regras sem IA. |
+| `GEMINI_TIMEOUT_MS` | Tempo máximo de cada chamada de IA (padrão 15000). |
+
+## Formato das planilhas
+
+A planilha de rastreamento deve ter colunas de data/hora, velocidade e posição,
+com nomes como `timestamp`/`data_hora`/`data`, `velocidade_kmh`/`velocidade`,
+`latitude`/`lat` e `longitude`/`lon` (ou um link do Google Maps), além de `placa`.
+
+- O arquivo carregado fica associado à sessão, então dá para trocar a placa e
+  reexecutar a análise sem reenviar o arquivo.
+- A auditoria de roteiro não exige informar uma placa; quando necessário, ela usa
+  todos os registros compatíveis.
+
+## Telas
+
+Barra lateral com **Operação** (Análise de rastreio, Auditoria de roteiro) e **Cadastros**
+(Base de POIs, Regras de IA, Usuários). No rodapé, **Meu perfil** (troca de senha) e Sair.
+
+## Mensagem do dia (WhatsApp)
+
+Na **Análise de rastreio**, envie a planilha da SS (**Relatório histórico completo**, exportado a
+partir das **21:00 do dia anterior**). A aba **Mensagem do dia** abre com uma linha por placa:
+
+- clique na placa para **editar a linha** (Salvar / Voltar ao original);
+- a **Mensagem completa** (com as edições) fica no fim da página para selecionar e colar no grupo,
+  e também sai no **Word**;
+- **Excel p/ cadastro na SS**: pontos sem POI com nome sugerido (OpenStreetMap), latitude,
+  longitude e link do Google Maps, para o aprendiz cadastrar na SS.
+
+Regras: o local onde a carreta passou a noite sempre aparece; Matriz e CDs com chegadas e saídas;
+postos e restaurantes só com 30 min ou mais; manobras de pátio contam como uma parada; horário de
+saída = quando o veículo volta a andar (> 3 km/h); antes da meia-noite, "de ontem".
+Nomes: Matriz, CDs e destinos frequentes vêm de uma lista fixa (`mensagem_saidas/unidades.py`);
+os demais usam o nome do POI da SS. As outras abas (Relatório por placa, Linha do tempo,
+Paradas sem POI) também aceitam outras planilhas de rastreamento.
+
+## Estrutura do código
+
+| Arquivo | Responsabilidade |
+|---|---|
+| `app.py` | Cria o app Flask, registra as rotas, CSRF e inicia o servidor |
+| `config.py` | Carrega o `.env` e define os diretórios |
+| `banco.py` | SQLite: tabelas, migrações, usuário inicial, POIs e regras |
+| `seguranca.py` | CSRF, limite de login, senhas e token de API |
+| `utils.py` / `geo.py` | Normalização de texto e números; distâncias |
+| `arquivos.py` | Leitura de CSV/Excel e uploads temporários |
+| `analise.py` | Paradas não cadastradas, linha do tempo, resumo geral e Word |
+| `analisador_rastreio.py` | Motor de detecção de entradas/saídas em POIs |
+| `auditoria_roteiro.py` | Auditoria planejado × executado |
+| `leitor_universal.py` | Leitura de arquivos de diferentes fornecedores de rastreio |
+| `agente_refinamento.py` | Refinamento de textos por IA (com regras aplicadas sem IA como reserva) |
+| `mensagem_saidas/` | Mensagem do dia: leitura da SS, paradas, lista fixa de locais, regras, sugestão de nomes e Excel |
+| `rotas/` | Blueprints: `auth`, `analise`, `configuracoes`, `auditoria`, `api`, `mensagem` |
+
+## Testes
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+Os testes usam um banco temporário e não alteram o `poi_store.db`. O GitHub
+Actions roda a suíte a cada push (`.github/workflows/testes.yml`); o executável
+Windows é gerado manualmente pelo workflow `Compilar Executavel Windows`.

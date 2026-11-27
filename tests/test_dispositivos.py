@@ -1,5 +1,4 @@
 import unittest
-from datetime import datetime
 
 from dispositivos_service import normalizar_payload_dispositivo
 
