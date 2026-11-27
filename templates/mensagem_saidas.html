@@ -91,7 +91,8 @@
           <div><label>Artigo</label><select name="genero"><option value="o">do/no</option><option value="a">da/na</option></select></div>
           <div><label>Tipo</label><select name="tipo">{% for t in tipos %}<option value="{{ t }}" {% if t == 'POSTO' %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select></div>
           <button type="submit">Cadastrar</button>
-          <input type="hidden" name="raio_m" value="250"><input type="hidden" name="aliases_ss" value="{{ p.poi_ss if p.poi_ss and p.poi_ss_dist_m is not none and p.poi_ss_dist_m <= 250 else '' }}">
+          <div class="campo-nome"><label>Nome do POI na SS (opcional — só se for este mesmo local)</label><input name="aliases_ss" value="" placeholder="{{ p.poi_ss or '' }}"></div>
+          <input type="hidden" name="raio_m" value="250">
           <input type="hidden" name="latitude" value="{{ p.lat if p.lat is not none else '' }}"><input type="hidden" name="longitude" value="{{ p.lon if p.lon is not none else '' }}">
         </form>
         {% endif %}
@@ -101,7 +102,7 @@
       {% else %}
       <p class="vazio">Nada para conferir. ✔</p>
       {% endfor %}
-      {% if resultado.conferir %}<p style="margin-top:16px"><a class="link" href="/mensagem_saidas/relatorio.xlsx">⬇ Relatório de pontos sem cadastro (Excel, para cadastrar na SS)</a></p>{% endif %}
+      {% if resultado.conferir or pendentes_ss %}<p style="margin-top:16px"><a class="link" href="/mensagem_saidas/relatorio.xlsx">⬇ Relatório de pontos para cadastrar na SS (Excel)</a>{% if pendentes_ss %} — inclui {{ pendentes_ss }} local(is) do sistema ainda não cadastrado(s) na SS{% endif %}</p>{% endif %}
     </section>
   </div>
   {% endif %}

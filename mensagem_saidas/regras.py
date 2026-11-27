@@ -39,7 +39,12 @@ class ResultadoMensagem:
 
 def _hora(dt: datetime, data_mensagem: date) -> str:
     texto = f"{dt:%H:%M}"
-    return f"{texto} de ontem" if dt.date() < data_mensagem else texto
+    dias = (data_mensagem - dt.date()).days
+    if dias == 1:
+        return f"{texto} de ontem"
+    if dias > 1:
+        return f"{texto} de {dt:%d/%m}"
+    return texto
 
 
 def _onde(p: Parada) -> tuple[str, str, str]:

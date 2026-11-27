@@ -66,6 +66,21 @@ def veio_em_movimento(registros: pd.DataFrame) -> bool:
     return not _parado(registros.iloc[0].to_dict())
 
 
+def _perto_do_local(trecho: _Trecho, local: Local) -> bool:
+    """O trecho está a até 2× o raio do local (portão, fila, pátio externo)?"""
+    limite = 2 * local.raio_m
+    aliases = {normalizar_nome_poi(a) for a in local.aliases_ss}
+    for r in trecho.regs:
+        c = _coord(r)
+        if c and local.latitude is not None and local.longitude is not None:
+            if haversine_metros(*c, local.latitude, local.longitude) <= limite:
+                return True
+        dist = r.get("poi_ss_dist_m")
+        if dist is not None and normalizar_nome_poi(r.get("poi_ss")) in aliases and dist <= limite:
+            return True
+    return False
+
+
 def _pode_unificar(atual: _Trecho, prox: _Trecho) -> bool:
     if atual.saida is None:
         return False
@@ -73,6 +88,10 @@ def _pode_unificar(atual: _Trecho, prox: _Trecho) -> bool:
     if movimento_min > MERGE_MOVIMENTO_MIN:
         return False
     if atual.local and prox.local and atual.local.id != prox.local.id:
+        return False
+    # Depois de sair de um local cadastrado, uma parada curta longe dele (semáforo, trânsito)
+    # não pode atrasar o horário de saída.
+    if atual.local and prox.local is None and not _perto_do_local(prox, atual.local):
         return False
     a, b = _coord(atual.regs[-1]), _coord(prox.regs[0])
     if a and b:

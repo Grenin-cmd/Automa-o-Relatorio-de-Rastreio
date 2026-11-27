@@ -47,8 +47,9 @@ def _resultado_da_sessao() -> ResultadoMensagem | None:
         return None
     try:
         df = ler_exportacao_ss(caminho)
-    except FormatoSSDesconhecido as erro:
-        flash(str(erro), "danger")
+    except Exception as erro:  # qualquer falha de leitura descarta o arquivo, para a página não travar
+        mensagem = str(erro) if isinstance(erro, FormatoSSDesconhecido) else f"Não foi possível ler a planilha: {erro}"
+        flash(mensagem, "danger")
         remover_temporario(session.pop("mensagem_arquivo_path", None))
         session.pop("mensagem_arquivo_nome", None)
         return None
@@ -89,6 +90,7 @@ def mensagem_saidas():
         sugestoes=sugestoes,
         arquivo_nome=session.get("mensagem_arquivo_nome", ""),
         tipos=TIPOS,
+        pendentes_ss=sum(1 for l in banco.listar_locais() if not l.cadastrado_na_ss),
     )
 
 
@@ -116,11 +118,11 @@ def ignorar_item():
 @login_required
 def relatorio_pontos():
     resultado = _resultado_da_sessao()
-    if resultado is None:
-        flash("Gere a mensagem primeiro.", "warning")
-        return redirect(url_for("mensagem.mensagem_saidas"))
-    dados = gerar_excel_pontos(resultado.conferir, session.get("mensagem_sugestoes", {}))
-    nome = f"pontos_sem_cadastro_{resultado.data_mensagem:%d-%m-%Y}.xlsx"
+    pendentes = [l for l in banco.listar_locais() if not l.cadastrado_na_ss]
+    itens = resultado.conferir if resultado else []
+    dados = gerar_excel_pontos(itens, session.get("mensagem_sugestoes", {}), pendentes)
+    data = resultado.data_mensagem if resultado else None
+    nome = f"pontos_para_cadastrar_na_ss_{data:%d-%m-%Y}.xlsx" if data else "pontos_para_cadastrar_na_ss.xlsx"
     return send_file(BytesIO(dados), as_attachment=True, download_name=nome,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 

@@ -47,7 +47,10 @@ def _ler_csv(origem: str | bytes) -> pd.DataFrame:
             texto = dados.decode(encoding)
         except UnicodeDecodeError:
             continue
-        return pd.read_csv(io.StringIO(texto), sep=";", dtype=str, keep_default_na=False)
+        try:
+            return pd.read_csv(io.StringIO(texto), sep=";", dtype=str, keep_default_na=False)
+        except (pd.errors.EmptyDataError, pd.errors.ParserError) as erro:
+            raise FormatoSSDesconhecido(f"Formato de planilha da SS não reconhecido: {erro}") from erro
     raise FormatoSSDesconhecido("Não foi possível decodificar o arquivo (esperado cp1252 ou UTF-8).")
 
 
@@ -61,12 +64,12 @@ def ler_exportacao_ss(origem: str | bytes) -> pd.DataFrame:
     bruto = _ler_csv(origem)
     cols = set(bruto.columns)
 
-    if {"Placa", "Data", "Hora", "Distância", "POI"} <= cols:
+    if {"Placa", "Data", "Hora", "Velocidade", "Distância", "POI"} <= cols:
         endereco = bruto.get("Endereço", pd.Series([""] * len(bruto)))
         dist = bruto["Distância"]
         ign = bruto["Ignição"].map({"Ligado": True, "Desligado": False}) if "Ignição" in cols else None
         lat = lon = pd.Series([None] * len(bruto), dtype="object")
-    elif {"Placa", "Data", "POI", "POI - Distância", "Latitude / Longitude"} <= cols:
+    elif {"Placa", "Data", "Velocidade", "POI", "POI - Distância", "Latitude / Longitude"} <= cols:
         endereco = bruto.get("Local", pd.Series([""] * len(bruto)))
         dist = bruto["POI - Distância"]
         ign = None

@@ -77,7 +77,7 @@
       <tr><td>{{ l.nome_exibicao }}</td><td>{{ l.tipo|capitalize }}</td><td>{{ l.aliases_ss|join(', ') or ('coordenadas' if l.latitude is not none else '—') }}</td><td>{{ l.raio_m|int }} m</td>
       <td><form method="post">{{ csrf_input() }}<input type="hidden" name="acao" value="marcar_ss"><input type="hidden" name="local_id" value="{{ l.id }}"><input type="hidden" name="valor" value="{{ '0' if l.cadastrado_na_ss else '1' }}"><button class="secondary" type="submit">{{ 'Sim' if l.cadastrado_na_ss else 'Não' }}</button></form></td>
       <td><a class="link" href="/locais_importantes?editar={{ l.id }}">editar</a>
-        <form method="post" onsubmit="return confirm('Excluir {{ l.nome_exibicao }}?');">{{ csrf_input() }}<input type="hidden" name="acao" value="excluir"><input type="hidden" name="local_id" value="{{ l.id }}"><button class="secondary" type="submit">Excluir</button></form></td></tr>
+        <form method="post" data-nome="{{ l.nome_exibicao }}" onsubmit="return confirm('Excluir ' + this.dataset.nome + '?');">{{ csrf_input() }}<input type="hidden" name="acao" value="excluir"><input type="hidden" name="local_id" value="{{ l.id }}"><button class="secondary" type="submit">Excluir</button></form></td></tr>
     {% endfor %}
     </tbody></table>
   </section>

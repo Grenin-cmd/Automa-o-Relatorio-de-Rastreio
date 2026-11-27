@@ -6,6 +6,7 @@ from io import BytesIO
 import pandas as pd
 
 from mensagem_saidas.constantes import RAIO_PADRAO_M
+from mensagem_saidas.locais import Local
 from mensagem_saidas.regras import ItemConferir
 
 COLUNAS = ["Placa", "Início", "Fim", "Duração (min)", "Nome sugerido", "Tipo", "Endereço", "Cidade", "UF",
@@ -13,14 +14,29 @@ COLUNAS = ["Placa", "Início", "Fim", "Duração (min)", "Nome sugerido", "Tipo"
            "Raio sugerido (m)", "Cadastrado na SS"]
 
 
-def gerar_excel_pontos(itens: list[ItemConferir], sugestoes: dict[str, str | None]) -> bytes:
+def _link(lat: float | None, lon: float | None) -> str:
+    return f"https://www.google.com/maps/search/?api=1&query={lat},{lon}" if lat is not None and lon is not None else ""
+
+
+def gerar_excel_pontos(
+    itens: list[ItemConferir],
+    sugestoes: dict[str, str | None],
+    locais_pendentes: list[Local] | tuple[Local, ...] = (),
+) -> bytes:
+    """Pontos sem cadastro da lista Conferir + locais já cadastrados no sistema que ainda
+    não estão na SS (`cadastrado_na_ss = não`), com o nome e tipo escolhidos."""
     linhas = []
+    for local in locais_pendentes:
+        linhas.append([
+            "", "", "", "", local.nome_exibicao, local.tipo, "", "", "", local.latitude, local.longitude,
+            _link(local.latitude, local.longitude), ", ".join(local.aliases_ss), None, local.raio_m, "",
+        ])
     for item in itens:
         p = item.parada
         if item.motivo != "local_desconhecido" or p is None:
             continue
         fim = p.saida or p.fim
-        link = f"https://www.google.com/maps/search/?api=1&query={p.lat},{p.lon}" if p.lat is not None else ""
+        link = _link(p.lat, p.lon)
         linhas.append([
             item.placa, f"{p.inicio:%d/%m/%Y %H:%M}", f"{fim:%d/%m/%Y %H:%M}", round(p.duracao_min),
             sugestoes.get(item.chave) or "", "", p.endereco, p.cidade, p.uf, p.lat, p.lon, link,
