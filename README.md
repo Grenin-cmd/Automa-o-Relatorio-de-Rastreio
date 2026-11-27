@@ -62,6 +62,34 @@ com nomes como `timestamp`/`data_hora`/`data`, `velocidade_kmh`/`velocidade`,
 - A auditoria de roteiro não exige informar uma placa; quando necessário, ela usa
   todos os registros compatíveis.
 
+## Mensagem de saídas (WhatsApp)
+
+Gera a mensagem diária "*Horário de saída das Carretas*" a partir da planilha da SS
+Telemática, sem IA: a mesma planilha sempre gera o mesmo texto.
+
+1. Na SS, exporte o **Relatório histórico completo** a partir das **18:00 do dia anterior**
+   até agora (CSV). O formato "Relatório Histórico" também é aceito, mas não traz
+   coordenadas.
+2. No sistema, abra **Mensagem de saídas**, envie o arquivo e clique em **Gerar mensagem**.
+3. Clique em **📋 Copiar** e cole no grupo.
+
+Regras usadas:
+- O local onde a carreta passou a noite sempre aparece ("Saída do/da …" ou "Está no/na …").
+- Matriz e CDs: chegadas e saídas. Postos e restaurantes: só paradas de 30 min ou mais.
+- Manobras curtas no pátio contam como uma parada só.
+- Horário de saída = primeiro registro em que o veículo volta a andar (> 3 km/h).
+- Horários antes da meia-noite levam "de ontem".
+
+**Conferir:** o que o sistema não sabe classificar (parada longa em ponto sem cadastro,
+veículo que já estava andando no início da planilha) fica numa lista ao lado da mensagem,
+fora do texto. Para pontos sem cadastro há uma sugestão de nome do OpenStreetMap (precisa
+de internet); ao **Cadastrar**, o local passa a ser reconhecido automaticamente.
+O link **Relatório de pontos sem cadastro** baixa um Excel para cadastrar esses pontos na SS.
+
+**Locais importantes** (menu lateral): nome que aparece na mensagem, artigo (do/da),
+tipo (Matriz, CD, Posto…), nomes do POI na SS e raio. Já vem com os locais usados nas
+mensagens de novembro/2026.
+
 ## Estrutura do código
 
 | Arquivo | Responsabilidade |
@@ -77,7 +105,8 @@ com nomes como `timestamp`/`data_hora`/`data`, `velocidade_kmh`/`velocidade`,
 | `auditoria_roteiro.py` | Auditoria planejado × executado |
 | `leitor_universal.py` | Leitura de arquivos de diferentes fornecedores de rastreio |
 | `agente_refinamento.py` | Refinamento de textos por IA (com regras aplicadas sem IA como reserva) |
-| `rotas/` | Blueprints: `auth`, `analise`, `configuracoes`, `auditoria`, `api` |
+| `mensagem_saidas/` | Mensagem de saídas: leitura da SS, paradas, regras, sugestão de nomes e Excel |
+| `rotas/` | Blueprints: `auth`, `analise`, `configuracoes`, `auditoria`, `api`, `mensagem` |
 
 ## Testes
 
