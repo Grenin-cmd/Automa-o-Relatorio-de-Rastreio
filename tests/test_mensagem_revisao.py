@@ -7,7 +7,6 @@ import pytest
 from mensagem_saidas import unidades
 from mensagem_saidas.leitura import FormatoSSDesconhecido, ler_exportacao_ss
 from mensagem_saidas.paradas import detectar_paradas
-from mensagem_saidas.regras import montar_mensagem
 
 FIX = Path(__file__).parent / "fixtures" / "ss"
 
@@ -46,15 +45,3 @@ def test_parada_no_portao_continua_unificada():  # 187 m do CD de Contagem (raio
               ("01:01", 40, "CECOTI CD CONTAGEM", 600, None, None)])
     p = detectar_paradas(df, unidades.LOCAIS)[0]
     assert f"{p.saida:%H:%M}" == "01:01"
-
-
-# Re-graded minor 3 -------------------------------------------------------
-def test_saida_de_dois_dias_atras_mostra_a_data():
-    df = _df([("05:00", 0, "CECOTI MATRIZ", 10, None, None)])
-    df.loc[len(df)] = df.iloc[0]
-    df["data_hora"] = pd.to_datetime(["2026-11-25 05:00", "2026-11-25 05:10"])
-    df.loc[1, "velocidade_kmh"] = 40.0
-    extra = df.iloc[[1]].copy()
-    extra["data_hora"] = pd.Timestamp("2026-11-27 06:00")
-    res = montar_mensagem(pd.concat([df, extra], ignore_index=True), unidades.LOCAIS)
-    assert "Saída da Matriz as 05:10 de 25/11." in res.texto

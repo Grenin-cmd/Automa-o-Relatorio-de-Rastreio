@@ -49,18 +49,16 @@ def test_resultado_fica_em_cache():
     assert len(chamadas) == 1
 
 
-def test_excel_tem_colunas_e_link():
+def test_excel_tem_so_as_4_colunas():
     res = montar_mensagem(ler_exportacao_ss(str(FIX / "historico_completo_2026-11-27.csv")), [])
-    itens = [i for i in res.conferir if i.motivo == "local_desconhecido"]
-    dados = gerar_excel_pontos(res.conferir, {itens[0].chave: "Posto Sugerido"})
-    df = pd.read_excel(io.BytesIO(dados))
-    assert list(df.columns)[-1] == "Cadastrado na SS" and "Link Google Maps" in df.columns
-    assert len(df) == len(itens)
+    sem_lista = [p for p in res.pontos_sem_poi]
+    chave = f"{sem_lista[0].lat:.5f},{sem_lista[0].lon:.5f}"
+    df = pd.read_excel(io.BytesIO(gerar_excel_pontos(sem_lista, {chave: "Posto Sugerido"})))
+    assert list(df.columns) == ["Nome sugerido", "Latitude", "Longitude", "Link Google Maps"]
     assert df.iloc[0]["Nome sugerido"] == "Posto Sugerido"
     assert str(df.iloc[0]["Link Google Maps"]).startswith("https://www.google.com/maps/search/?api=1&query=")
 
 
-def test_excel_so_itens_de_local_desconhecido():
+def test_excel_sem_coordenadas_fica_vazio():
     res = montar_mensagem(ler_exportacao_ss(str(FIX / "historico_2026-11-26.csv")), unidades.LOCAIS)
-    df = pd.read_excel(io.BytesIO(gerar_excel_pontos(res.conferir, {})))
-    assert set(df["Placa"]) == {"PLA-0A02", "PLA-0A06"}
+    assert len(pd.read_excel(io.BytesIO(gerar_excel_pontos(res.pontos_sem_poi, {})))) == 0
