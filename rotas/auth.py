@@ -87,10 +87,18 @@ def trocar_senha():
                     (generate_password_hash(nova_senha), usuario["id"]),
                 )
                 conn.commit()
-                remover_arquivo_senha_inicial()
+                remover_arquivo_senha_inicial(usuario["nome"])
                 flash("Senha alterada com sucesso.", "success")
-                return redirect(url_for("analise.index"))
+                return redirect(url_for("analise.index") if obrigatoria else url_for("auth.perfil"))
         finally:
             conn.close()
+        if not obrigatoria:
+            return redirect(url_for("auth.perfil"))
 
-    return render_template("trocar_senha.html", obrigatoria=obrigatoria)
+    return render_template("perfil.html", obrigatoria=obrigatoria)
+
+
+@bp.route("/perfil")
+@login_required
+def perfil():
+    return render_template("perfil.html", obrigatoria=False)

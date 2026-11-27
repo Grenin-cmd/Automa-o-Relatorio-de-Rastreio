@@ -1,4 +1,4 @@
-"""Tela de configurações: usuários, POIs e regras de IA."""
+"""Cadastros: Base de POIs, Regras de IA e Usuários."""
 from __future__ import annotations
 
 import sqlite3
@@ -10,18 +10,39 @@ from werkzeug.security import generate_password_hash
 import seguranca
 
 bp = Blueprint("configuracoes", __name__)
-from banco import adicionar_regra, get_connection, invalidar_cache_pois, invalidar_cache_regras
+from banco import adicionar_regra, get_connection, get_saved_pois, invalidar_cache_pois, invalidar_cache_regras
 from rotas.comum import login_required, usuario_atual
+
+
+@bp.route("/pois")
+@login_required
+def pois():
+    return render_template("pois.html", total_pois=len(get_saved_pois()))
+
+
+@bp.route("/regras")
+@login_required
+def regras():
+    return render_template("regras.html")
 
 
 @bp.route("/configuracoes", methods=["GET", "POST"])
 @login_required
 def configuracoes():
+    """Endereço antigo: GET vai para a Base de POIs; POST (formulários antigos) segue para Usuários."""
+    if request.method == "GET":
+        return redirect(url_for("configuracoes.pois"))
+    return usuarios()
+
+
+@bp.route("/usuarios", methods=["GET", "POST"])
+@login_required
+def usuarios():
     usuario = usuario_atual()
+    if not usuario or not usuario["pode_cadastrar_usuarios"]:
+        flash("Você não tem permissão para gerenciar usuários.", "warning")
+        return redirect(url_for("configuracoes.pois"))
     if request.method == "POST":
-        if not usuario or not usuario["pode_cadastrar_usuarios"]:
-            flash("Você não tem permissão para gerenciar usuários.", "warning")
-            return redirect(url_for("configuracoes.configuracoes"))
 
         acao = request.form.get("acao")
         if acao == "criar_usuario":
@@ -101,16 +122,16 @@ def configuracoes():
                         flash("Usuário não encontrado.", "warning")
                 finally:
                     conn.close()
-        return redirect(url_for("configuracoes.configuracoes"))
+        return redirect(url_for("configuracoes.usuarios"))
 
     conn = get_connection()
     try:
-        usuarios = [dict(row) for row in conn.execute(
+        lista = [dict(row) for row in conn.execute(
             "SELECT id, nome, pode_cadastrar_usuarios, ativo FROM usuarios ORDER BY nome COLLATE NOCASE"
         ).fetchall()]
     finally:
         conn.close()
-    return render_template("configuracoes.html", usuarios=usuarios)
+    return render_template("usuarios.html", usuarios=lista)
 
 
 @bp.route("/excluir_regras", methods=["POST"])
@@ -119,7 +140,7 @@ def excluir_regras():
     regra_ids = request.form.getlist("regra_ids")
     if not regra_ids:
         flash("Nenhuma regra selecionada para exclusão.", "warning")
-        return redirect(url_for("configuracoes.configuracoes"))
+        return redirect(url_for("configuracoes.regras"))
 
     conn = get_connection()
     try:
@@ -132,7 +153,7 @@ def excluir_regras():
     finally:
         conn.close()
         invalidar_cache_regras()
-    return redirect(url_for("configuracoes.configuracoes"))
+    return redirect(url_for("configuracoes.regras"))
 
 
 @bp.route("/excluir_pois", methods=["POST"])
@@ -141,7 +162,7 @@ def excluir_pois():
     poi_ids = request.form.getlist("poi_ids")
     if not poi_ids:
         flash("Nenhum POI selecionado para exclusão.", "warning")
-        return redirect(url_for("configuracoes.configuracoes"))
+        return redirect(url_for("configuracoes.pois"))
 
     conn = get_connection()
     try:
@@ -154,7 +175,7 @@ def excluir_pois():
     finally:
         conn.close()
         invalidar_cache_pois()
-    return redirect(url_for("configuracoes.configuracoes"))
+    return redirect(url_for("configuracoes.pois"))
 
 
 @bp.route("/adicionar_regra_feedback", methods=["POST"])
@@ -170,4 +191,4 @@ def adicionar_regra_feedback():
         adicionar_regra(descricao, categoria, poi_id)
         flash("Instrução de IA salva com sucesso!", "success")
 
-    return redirect(url_for("configuracoes.configuracoes"))
+    return redirect(url_for("configuracoes.regras"))

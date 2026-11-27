@@ -146,8 +146,17 @@ def forcar_troca_de_senha_padrao_legada(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE usuarios SET deve_trocar_senha = 1 WHERE id = ?", (row["id"],))
 
 
-def remover_arquivo_senha_inicial() -> None:
+def remover_arquivo_senha_inicial(nome_usuario: str) -> None:
+    """Apaga o arquivo da senha inicial só quando quem trocou a senha é o próprio
+    administrador inicial (antes, a troca de senha de qualquer usuário apagava)."""
     caminho = os.path.join(data_dir(), ARQUIVO_SENHA_INICIAL)
+    try:
+        with open(caminho, encoding="utf-8") as fh:
+            primeira = fh.readline().strip()
+    except OSError:
+        return
+    if primeira.lower() != f"usuario: {nome_usuario}".lower():
+        return
     try:
         os.unlink(caminho)
     except OSError:

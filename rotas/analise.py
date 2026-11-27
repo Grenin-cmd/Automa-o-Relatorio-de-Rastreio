@@ -82,7 +82,7 @@ def index():
                     flash(f"{len(imported_pois)} POI(s) importado(s) com sucesso.", "success")
                 except Exception as error:
                     flash(f"Erro ao processar POIs: {error}", "danger")
-            return redirect(url_for("configuracoes.configuracoes"))
+            return redirect(url_for("configuracoes.pois"))
 
         if arquivo and arquivo.filename:
             try:

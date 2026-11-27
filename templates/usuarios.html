@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Usuários{% endblock %}
+{% block conteudo %}
+<div class="cabecalho"><div><div class="sub">Cadastros</div><h1>Usuários</h1></div></div>
+<div class="grade" style="grid-template-columns: minmax(0, 1fr) minmax(0, 2fr)">
+  <section class="cartao">
+    <div class="cartao-topo"><div><h2>Novo usuário</h2><p>A senha é provisória: a pessoa define a dela no primeiro acesso.</p></div></div>
+    <form class="cartao-corpo" method="post" action="/usuarios" style="display:flex; flex-direction:column; gap:12px">{{ csrf_input() }}
+      <input type="hidden" name="acao" value="criar_usuario">
+      <div><label class="campo" for="novo_nome">Nome</label><input id="novo_nome" type="text" name="nome" required></div>
+      <div><label class="campo" for="nova_senha">Senha provisória</label><input id="nova_senha" type="password" name="senha" minlength="8" required></div>
+      <label style="display:flex; gap:8px; align-items:center; font-size:13px"><input type="checkbox" name="pode_cadastrar_usuarios" value="1"> Pode cadastrar usuários</label>
+      <button class="btn btn-escuro" type="submit">Cadastrar usuário</button>
+    </form>
+  </section>
+  <section class="cartao">
+    <div class="cartao-topo"><div><h2>Usuários cadastrados</h2></div></div>
+    <div class="cartao-corpo tabela-box">
+      <table><thead><tr><th>Nome</th><th>Permissão</th><th>Situação</th><th></th></tr></thead><tbody>
+      {% for u in usuarios %}
+        <tr><td style="font-weight:600">{{ u.nome }}</td>
+          <td>{% if u.pode_cadastrar_usuarios %}<span class="etiqueta roxa">Cadastra usuários</span>{% else %}<span class="etiqueta">Padrão</span>{% endif %}</td>
+          <td>{% if u.ativo %}<span class="etiqueta verde">Ativo</span>{% else %}<span class="etiqueta ambar">Desativado</span>{% endif %}</td>
+          <td style="text-align:right; white-space:nowrap">{% if u.id != usuario_atual.id %}
+            <form method="post" action="/usuarios" style="display:inline">{{ csrf_input() }}<input type="hidden" name="acao" value="alternar_permissao"><input type="hidden" name="usuario_id" value="{{ u.id }}"><button class="btn btn-pequeno" type="submit">Permissão</button></form>
+            <form method="post" action="/usuarios" style="display:inline">{{ csrf_input() }}<input type="hidden" name="acao" value="alternar_ativo"><input type="hidden" name="usuario_id" value="{{ u.id }}"><button class="btn btn-pequeno" type="submit">{{ 'Desativar' if u.ativo else 'Reativar' }}</button></form>
+            <form method="post" action="/usuarios" style="display:inline" data-nome="{{ u.nome }}" onsubmit="return confirm('Gerar uma senha temporária para ' + this.dataset.nome + '?')">{{ csrf_input() }}<input type="hidden" name="acao" value="redefinir_senha"><input type="hidden" name="usuario_id" value="{{ u.id }}"><button class="btn btn-pequeno" type="submit">Redefinir senha</button></form>
+          {% else %}<span class="dica">você</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+  </section>
+</div>
+{% endblock %}

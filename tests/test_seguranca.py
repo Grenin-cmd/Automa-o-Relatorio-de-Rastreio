@@ -124,7 +124,7 @@ class AppSegurancaTests(unittest.TestCase):
             "confirmacao": "novasenha22", "csrf_token": token,
         })
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(self.client.get("/configuracoes").status_code, 200)
+        self.assertEqual(self.client.get("/perfil").status_code, 200)
 
     def test_senha_padrao_legada_obriga_troca(self):
         usuario_id = _criar_usuario("legado", banco.SENHA_PADRAO_LEGADA)
