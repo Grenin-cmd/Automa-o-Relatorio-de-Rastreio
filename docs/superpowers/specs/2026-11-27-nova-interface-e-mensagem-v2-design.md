@@ -1,6 +1,6 @@
 # Nova interface + Mensagem de saídas v2 — design
 
-Data: 27/11/2026 · Situação: aguardando aprovação
+Data: 27/11/2026 · Situação: aprovado (com os ajustes de 27/11: sem "Ao vivo" e sem botão Copiar)
 Substitui, onde diverge, `2026-11-27-mensagem-saidas-design.md` (v1).
 Desenho aprovado: proposta D em https://claude.ai/artifact/GiSKwwbWKkATYGyyWzhFYv#artboard-OpcaoD
 
@@ -38,7 +38,8 @@ As alterações pendentes do Codespaces serão integradas depois; a interface ai
   - Ponto sem POI: `Saída de {Cidade} {UF} as HH:MM.` (como v1) e entra no Excel do aprendiz.
 - **Edição por placa:** cada placa é uma linha clicável; ao clicar abre um campo de texto com
   **Salvar** e **Voltar ao original**. A edição vale para a planilha carregada (fica na sessão);
-  **Copiar mensagem** e **Word** usam o texto editado.
+  a mensagem completa (com as edições) fica num bloco de texto selecionável e no **Word**.
+  **Sem botão "Copiar mensagem"** (pedido do usuário).
 - **Situação** por placa (etiqueta): `Saiu HH:MM`, `Parado`, `No {tipo} HH:MM` (chegada em andamento).
 - **Números no topo:** veículos, já saíram, parados no local, pontos sem POI.
 - **Removido:** lista "Conferir", cadastro/tela de locais importantes, aceitar/ignorar, item
@@ -65,7 +66,7 @@ Telas e onde cada funcionalidade atual vai parar (nada é removido):
 
 | Hoje | Na nova interface |
 |---|---|
-| Análise: upload, placa, raio, relatório, resumo geral, linha do tempo, paradas não cadastradas, veículos ativos, Word, posições no mapa | **Análise de rastreio**: topo com planilha + "Nova planilha"; números; abas **Mensagem do dia · Relatório por placa · Linha do tempo · Paradas sem POI · Ao vivo**; raio e escolha da placa nas abas que usam |
+| Análise: upload, placa, raio, relatório, resumo geral, linha do tempo, paradas não cadastradas, veículos ativos, Word, posições no mapa | **Análise de rastreio**: topo com planilha + "Nova planilha"; números; abas **Mensagem do dia · Relatório por placa · Linha do tempo · Paradas sem POI**; raio e escolha da placa nas abas que usam. **Aba "Ao vivo" retirada por enquanto** (a API de veículos continua) |
 | Modal de POIs (importar, listar, buscar, excluir) e seção em Configurações | **Base de POIs** (tela própria) |
 | Modal de regras de IA e seção em Configurações | **Regras de IA** (tela própria) |
 | Usuários em Configurações | **Usuários** (tela própria) |
