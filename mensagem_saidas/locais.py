@@ -64,4 +64,9 @@ def resolver_local(
         for local in locais:
             if poi_ss_dist_m <= local.raio_m and any(normalizar_nome_poi(a) == chave for a in local.aliases_ss):
                 return local
+        # 3º: POI da SS fora da lista fixa, perto o bastante → local com o nome da SS
+        from mensagem_saidas.constantes import RAIO_PADRAO_M
+        if poi_ss_dist_m <= RAIO_PADRAO_M and not any(any(normalizar_nome_poi(a) == chave for a in l.aliases_ss) for l in locais):
+            from mensagem_saidas.unidades import local_da_ss
+            return local_da_ss(poi_ss)
     return None

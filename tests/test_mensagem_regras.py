@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-import banco
+from mensagem_saidas import unidades
 from mensagem_saidas.leitura import ler_exportacao_ss
 from mensagem_saidas.regras import montar_mensagem
 
@@ -28,7 +28,7 @@ def _confere(gerada, esperada):
 
 
 def _res(arquivo, ignorar=frozenset()):
-    return montar_mensagem(ler_exportacao_ss(str(FIX / arquivo)), banco.listar_locais(), ignorar)
+    return montar_mensagem(ler_exportacao_ss(str(FIX / arquivo)), unidades.LOCAIS, ignorar)
 
 
 @pytest.mark.parametrize("arquivo,gabarito", [
@@ -74,7 +74,7 @@ def test_de_ontem_na_virada_do_ano():
                        "velocidade_kmh": [0.0, 40.0, 50.0], "ignicao": [None] * 3, "evento": [""] * 3,
                        "poi_ss": ["CECOTI MATRIZ", None, None], "poi_ss_dist_m": [10, None, None], "endereco": [""] * 3,
                        "cidade": ["Cláudio"] * 3, "uf": ["MG"] * 3, "lat": [None] * 3, "lon": [None] * 3})
-    res = montar_mensagem(df, banco.listar_locais())
+    res = montar_mensagem(df, unidades.LOCAIS)
     assert res.texto.startswith("*Horário de saída das Carretas 01/01/2027*")
     assert "PLA-9Z99: Saída da Matriz as 23:50 de ontem." in res.texto
 
@@ -84,5 +84,5 @@ def test_veiculo_sem_paradas_fica_em_transito():
                        "velocidade_kmh": [60.0, 70.0], "ignicao": [None] * 2, "evento": [""] * 2, "poi_ss": [None] * 2,
                        "poi_ss_dist_m": [None] * 2, "endereco": [""] * 2, "cidade": ["X"] * 2, "uf": ["MG"] * 2,
                        "lat": [None] * 2, "lon": [None] * 2})
-    res = montar_mensagem(df, banco.listar_locais())
+    res = montar_mensagem(df, unidades.LOCAIS)
     assert "PLA-9Z98: Em trânsito." in res.texto and res.conferir[0].motivo == "sem_paradas"

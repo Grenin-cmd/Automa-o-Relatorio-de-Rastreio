@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import banco
+from mensagem_saidas import unidades
 from mensagem_saidas import sugestao
 from mensagem_saidas.leitura import ler_exportacao_ss
 from mensagem_saidas.regras import montar_mensagem
@@ -61,6 +61,6 @@ def test_excel_tem_colunas_e_link():
 
 
 def test_excel_so_itens_de_local_desconhecido():
-    res = montar_mensagem(ler_exportacao_ss(str(FIX / "historico_2026-11-26.csv")), banco.listar_locais())
+    res = montar_mensagem(ler_exportacao_ss(str(FIX / "historico_2026-11-26.csv")), unidades.LOCAIS)
     df = pd.read_excel(io.BytesIO(gerar_excel_pontos(res.conferir, {})))
     assert set(df["Placa"]) == {"PLA-0A02", "PLA-0A06"}

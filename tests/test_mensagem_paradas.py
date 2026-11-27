@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import banco
+from mensagem_saidas import unidades
 from mensagem_saidas.leitura import ler_exportacao_ss
 from mensagem_saidas.paradas import detectar_paradas, veio_em_movimento
 
@@ -16,7 +16,7 @@ def _df(arquivo):
 
 def _paradas(arquivo, placa):
     df = _df(arquivo)
-    return detectar_paradas(df[df.placa == placa], banco.listar_locais())
+    return detectar_paradas(df[df.placa == placa], unidades.LOCAIS)
 
 
 def hm(dt):
