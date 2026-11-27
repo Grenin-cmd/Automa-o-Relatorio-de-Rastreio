@@ -83,15 +83,16 @@
 {% set q = '&placa=' ~ (placa_escolhida|urlencode) ~ '&raio=' ~ (raio|int) %}
 <div class="barra-abas">
   <nav class="abas" aria-label="Abas da análise">
-    {% if resultado %}<a href="/?aba=mensagem{{ q }}" class="{{ 'ativa' if aba == 'mensagem' }}">Mensagem do dia</a>{% endif %}
+    {% if resultado %}<a href="/?aba=mensagem{{ q }}" class="{{ 'ativa' if aba == 'mensagem' }}">Mensagem do dia</a>
+    {% else %}<a href="/?aba=resumo{{ q }}" class="{{ 'ativa' if aba == 'resumo' }}">Resumo geral</a>{% endif %}
     <a href="/?aba=relatorio{{ q }}" class="{{ 'ativa' if aba == 'relatorio' }}">Relatório por placa</a>
     <a href="/?aba=linha{{ q }}" class="{{ 'ativa' if aba == 'linha' }}">Linha do tempo</a>
     <a href="/?aba=paradas{{ q }}" class="{{ 'ativa' if aba == 'paradas' }}">Paradas sem POI</a>
   </nav>
-  {% if aba in ('relatorio', 'linha', 'paradas') %}
+  {% if aba in ('resumo', 'relatorio', 'linha', 'paradas') %}
   <form class="filtros" method="get" action="/">
     <input type="hidden" name="aba" value="{{ aba }}">
-    {% if aba != 'paradas' %}<label>Placa<select name="placa">{% for p in placas %}<option value="{{ p }}" {{ 'selected' if p == placa_escolhida }}>{{ p }}</option>{% endfor %}</select></label>{% endif %}
+    {% if aba not in ('paradas', 'resumo') %}<label>Placa<select name="placa">{% for p in placas %}<option value="{{ p }}" {{ 'selected' if p == placa_escolhida }}>{{ p }}</option>{% endfor %}</select></label>{% endif %}
     <label>Raio de tolerância (m)<input type="number" name="raio" value="{{ raio|int }}" min="10" step="10"></label>
     <button class="btn" type="submit">Atualizar</button>
   </form>
@@ -138,6 +139,20 @@
 <section class="cartao completa">
   <div class="cartao-topo"><div><h2>Mensagem completa</h2><p>Já com as suas edições. Selecione o texto para colar no grupo.</p></div></div>
   <div class="cartao-corpo"><textarea readonly aria-label="Mensagem completa">{{ texto_completo }}</textarea></div>
+</section>
+
+{% elif aba == 'resumo' %}
+<section class="cartao">
+  <div class="cartao-topo"><div><h2>Resumo geral</h2><p>Um parágrafo por placa, refinado pelas regras de IA.</p></div>
+    {% if docx_available %}<a class="btn" href="/download_word">Word</a>{% endif %}</div>
+  <div class="linhas">
+    {% for linha in resumo_linhas %}{% set placa_l = linha.split(':', 1)[0].split(' ')[0] %}
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; padding:13px 12px">
+      <span class="texto" style="flex:1 1 360px; color:var(--ink-2); line-height:1.55">{{ linha }}</span>
+      {% if posicoes and placa_l in posicoes %}<a class="mapa" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query={{ posicoes[placa_l][0] }},{{ posicoes[placa_l][1] }}">mapa</a>{% endif %}
+    </div>
+    {% else %}<p class="vazio">Nenhuma placa encontrada.</p>{% endfor %}
+  </div>
 </section>
 
 {% elif aba == 'relatorio' %}

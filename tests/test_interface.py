@@ -75,3 +75,13 @@ def test_troca_de_senha_de_outro_usuario_nao_apaga_senha_inicial_do_admin(tmp_pa
     assert arquivo.exists()
     banco.remover_arquivo_senha_inicial("admin")
     assert not os.path.exists(arquivo)
+
+
+def test_selecionar_todos_e_categorias_de_regra():
+    c = cliente_logado()
+    post(c, "/adicionar_regra_feedback", descricao_regra="Regra para selecionar", categoria="GERAL")
+    assert "Selecionar todos" in c.get("/pois").get_data(as_text=True)
+    html = c.get("/regras").get_data(as_text=True)
+    assert "Selecionar todas" in html
+    for cat in ["NOMENCLATURA", "GERAL", "FORMATACAO"]:
+        assert f'value="{cat}"' in html

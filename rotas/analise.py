@@ -12,7 +12,7 @@ from analisador_rastreio import RastreamentoAnalyzer
 from leitor_universal import ler_rastreamento
 
 bp = Blueprint("analise", __name__)
-from analise import DOCX_DISPONIVEL, find_suspicious_stops, gerar_timeline_viagem, gerar_word_bytes, obter_posicoes_placas, parse_poi_dataframe
+from analise import DOCX_DISPONIVEL, find_suspicious_stops, gerar_resumo_geral_placas, gerar_timeline_viagem, gerar_word_bytes, obter_posicoes_placas, parse_poi_dataframe
 from mensagem_saidas import unidades
 from mensagem_saidas.leitura import ler_exportacao_ss
 from mensagem_saidas.regras import montar_mensagem, montar_texto
@@ -22,7 +22,7 @@ from rotas.comum import agente_ia, cleanup_cached_file, login_required
 from utils import resolver_coluna
 
 
-ABAS = ("mensagem", "relatorio", "linha", "paradas")
+ABAS = ("mensagem", "resumo", "relatorio", "linha", "paradas")
 _MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
 
@@ -103,7 +103,7 @@ def index():
 
     resultado = resultado_mensagem(caminho)
     aba = request.args.get("aba") or ("mensagem" if resultado else "relatorio")
-    if aba not in ABAS or (aba == "mensagem" and not resultado):
+    if aba not in ABAS or (aba == "mensagem" and not resultado) or (aba == "resumo" and resultado):
         aba = "relatorio"
     try:
         raio = float(request.args.get("raio", 200) or 200)
@@ -129,6 +129,13 @@ def index():
             edicoes = session.get("mensagem_edicoes", {})
             contexto.update(edicoes=edicoes, texto_completo=texto_mensagem(resultado),
                             posicoes=obter_posicoes_placas(df_full))
+        elif aba == "resumo":
+            # Planilhas que não são da SS: o resumo geral antigo (com IA, mapa e Word) continua disponível.
+            regras = get_regras_ativas()
+            refinar = (lambda texto: agente_ia.refinar_relatorio(texto, regras)) if agente_ia else None
+            resumo = gerar_resumo_geral_placas(df_full, _pois_ajustados(raio), raio_tolerancia_m=raio, refinar=refinar)
+            session["word_summary"] = resumo
+            contexto.update(resumo_linhas=[l for l in resumo.split("\n\n") if l.strip()], posicoes=obter_posicoes_placas(df_full))
         elif aba == "relatorio" and placa:
             df_placa = df_full[df_full[placa_col].astype(str) == placa]
             bruto = RastreamentoAnalyzer(pois=_pois_ajustados(raio), raio_tolerancia_m=raio).gerar_relatorio(df_placa)
@@ -147,18 +154,22 @@ def index():
 @login_required
 def download_word():
     resultado = resultado_mensagem(arquivo_atual())
-    if resultado is None or not resultado.data_mensagem:
-        flash("Envie a planilha da SS para gerar a mensagem em Word.", "warning")
+    if resultado is not None and resultado.data_mensagem:
+        texto, nome = texto_mensagem(resultado), f"mensagem_saidas_{resultado.data_mensagem:%d-%m-%Y}.docx"
+    elif session.get("word_summary") and arquivo_atual():
+        texto, nome = session["word_summary"], "resumo_geral_frotas.docx"
+    else:
+        flash("Envie a planilha e abra a Mensagem do dia (ou o Resumo geral) para gerar o Word.", "warning")
         return redirect("/")
     try:
-        doc_bytes = gerar_word_bytes(texto_mensagem(resultado))
+        doc_bytes = gerar_word_bytes(texto)
     except RuntimeError as error:
         flash(str(error), "danger")
         return redirect("/")
     return send_file(
         BytesIO(doc_bytes),
         as_attachment=True,
-        download_name=f"mensagem_saidas_{resultado.data_mensagem:%d-%m-%Y}.docx",
+        download_name=nome,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 

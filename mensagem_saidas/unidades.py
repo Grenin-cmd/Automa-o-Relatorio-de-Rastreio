@@ -29,7 +29,9 @@ LOCAIS: list[Local] = [
 ]
 
 _MINUSCULAS = {"em", "de", "da", "do", "das", "dos", "e", "na", "no", "nas", "nos", "a", "o"}
-_SIGLAS = {"CD", "MG", "SP", "RJ", "GO", "BA", "ES", "PR", "SC", "RS", "MT", "MS", "DF", "BR", "II", "III", "IV", "LTDA", "ME", "SA"}
+_UFS = {"AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+        "RS", "RO", "RR", "SC", "SP", "SE", "TO"}
+_SIGLAS = _UFS | {"CD", "BR", "II", "III", "IV", "LTDA", "ME", "SA"}
 
 
 def _palavra(p: str, primeira: bool) -> str:
@@ -46,9 +48,18 @@ def _palavra(p: str, primeira: bool) -> str:
 
 
 def formatar_nome_ss(nome: str) -> str:
-    """'POSTO JALÉ BR-262 EM ARAÚJOS' -> 'Posto Jalé BR-262 em Araújos' (siglas e números mantidos)."""
-    palavras = " ".join(str(nome).split()).split(" ")
-    return " ".join(_palavra(p, i == 0) for i, p in enumerate(palavras))
+    """'POSTO JALÉ BR-262 EM ARAÚJOS' -> 'Posto Jalé BR-262 em Araújos' (siglas e números mantidos).
+    Partes separadas por '/', '(' ou ')' são tratadas uma a uma: 'LUZIA/MG' -> 'Luzia/MG'."""
+    texto = " ".join(str(nome).split())
+    partes = re.split(r"([\s/()]+)", texto)
+    saida, primeira = [], True
+    for parte in partes:
+        if not parte or re.fullmatch(r"[\s/()]+", parte):
+            saida.append(parte)
+            continue
+        saida.append(_palavra(parte, primeira))
+        primeira = False
+    return "".join(saida)
 
 
 def tipo_por_nome(nome: str) -> str:

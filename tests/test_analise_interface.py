@@ -88,3 +88,17 @@ def test_sem_planilha_mostra_envio():
 def test_auditoria_no_novo_layout():
     html = cliente_logado().get("/auditoria_roteiro").get_data(as_text=True)
     assert "Meu perfil" in html and "Auditoria de roteiro" in html
+
+
+def test_planilha_generica_tem_resumo_geral_e_word():
+    c = cliente_logado()
+    _enviar(c, RAIZ / "test_rastreio.csv")
+    html = c.get("/?aba=resumo").get_data(as_text=True)
+    assert "Resumo geral" in html and "ABC1234" in html
+    assert c.get("/download_word").status_code == 200
+
+
+def test_planilha_da_ss_nao_mostra_resumo_geral():
+    c = cliente_logado()
+    _enviar(c, FIX / "historico_completo_2026-11-27.csv")
+    assert "aba=resumo" not in c.get("/?aba=mensagem").get_data(as_text=True)

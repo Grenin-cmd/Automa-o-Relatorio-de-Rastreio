@@ -17,14 +17,14 @@
   </section>
   <section class="cartao">
     <div class="cartao-topo">
-      <div><h2>Pontos cadastrados</h2><p id="infoPOIs">Digite para buscar por nome, cidade ou tipo.</p></div>
+      <div><h2>Pontos cadastrados</h2><p id="infoPOIs">Digite para buscar por nome, cidade ou tipo.</p><p class="dica">A caixa do cabeçalho seleciona todos os pontos listados.</p></div>
       <button class="btn btn-perigo btn-pequeno" type="submit" form="formExcluir" onclick="return confirm('Excluir os pontos selecionados?')">Excluir selecionados</button>
     </div>
     <div class="cartao-corpo">
       <input id="buscaPOIs" type="search" placeholder="Buscar POI…" aria-label="Buscar POI" oninput="filtrar(this.value)">
       <form id="formExcluir" method="post" action="/excluir_pois">{{ csrf_input() }}
         <div class="tabela-box" style="max-height: 520px; margin-top: 12px">
-          <table><thead><tr><th style="width:32px"></th><th>Nome</th><th>Tipo</th><th>Cidade</th><th>Raio</th><th>Coordenadas</th></tr></thead>
+          <table><thead><tr><th style="width:32px"><input type="checkbox" aria-label="Selecionar todos" title="Selecionar todos" onchange="document.querySelectorAll('input[name=poi_ids]').forEach(c => c.checked = this.checked)"></th><th>Nome</th><th>Tipo</th><th>Cidade</th><th>Raio</th><th>Coordenadas</th></tr></thead>
           <tbody id="corpoPOIs"></tbody></table>
         </div>
       </form>

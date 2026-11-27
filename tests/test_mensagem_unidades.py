@@ -35,3 +35,10 @@ def test_poi_da_ss_longe_nao_vira_local():
 
 def test_lista_fixa_tem_prioridade_sobre_nome_da_ss():
     assert resolver_local(None, None, "CECOTI MATRIZ", 20, LOCAIS).nome_exibicao == "Matriz"
+
+
+def test_siglas_entre_parenteses_e_barra():
+    assert formatar_nome_ss("POSTO TREVÃO (MG)") == "Posto Trevão (MG)"
+    assert formatar_nome_ss("POSTO SANTA LUZIA/MG") == "Posto Santa Luzia/MG"
+    assert formatar_nome_ss("P.S. GRAAL PE") == "P.S. Graal PE"
+    assert formatar_nome_ss("POSTO ALE TO") == "Posto Ale TO"
